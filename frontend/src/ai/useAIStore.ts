@@ -548,17 +548,24 @@ export const useAIStore = create<AIState>()(
         const editorStore = useEditorStore.getState();
         const simStore = useSimulatorStore.getState();
 
+        // Always prefer the existing sketch file (main-sketch) — never create duplicates
         let targetFile =
           editorStore.files.find((f) => f.name === proposal.fileName) ||
           editorStore.files.find((f) => f.name.endsWith('.ino') || f.name.endsWith('.py') || f.name.endsWith('.cpp')) ||
           editorStore.files[0];
 
         if (targetFile) {
+          // Write into the existing file
           editorStore.setFileContent(targetFile.id, proposal.proposedContent);
+          // Ensure this file tab is open & active so Monaco shows it
           editorStore.openFile(targetFile.id);
           editorStore.setActiveFile(targetFile.id);
         } else {
-          const newId = editorStore.createFile(proposal.fileName || 'sketch.ino', proposal.proposedContent);
+          // createFile(name) returns the new id — but it creates an EMPTY file
+          // We must then call setFileContent to actually write code into it
+          const newId = editorStore.createFile(proposal.fileName || 'sketch.ino');
+          editorStore.setFileContent(newId, proposal.proposedContent);
+          // File is auto-opened and activated by createFile, but be explicit
           editorStore.openFile(newId);
           editorStore.setActiveFile(newId);
         }
@@ -593,10 +600,8 @@ export const useAIStore = create<AIState>()(
               editorStore.setFileContent(libFile.id, `${libFile.content.trim()}\n${toAdd.join('\n')}\n`);
             }
           } else {
-            editorStore.createFile(
-              'libraries.txt',
-              `# Libraries automatically installed by VelxioAI\n${requiredLibs.join('\n')}\n`
-            );
+            const libId = editorStore.createFile('libraries.txt');
+            editorStore.setFileContent(libId, `# Libraries automatically installed by VelxioAI\n${requiredLibs.join('\n')}\n`);
           }
 
           // Register in active simulator board

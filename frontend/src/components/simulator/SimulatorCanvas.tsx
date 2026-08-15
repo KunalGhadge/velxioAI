@@ -2126,6 +2126,65 @@ export const SimulatorCanvas = ({ headerSlot }: SimulatorCanvasProps = {}) => {
     setPan({ x: 0, y: 0 });
   };
 
+  const handleZoomIn = () => {
+    const newZoom = Math.min(5, zoomRef.current * 1.25);
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (rect) {
+      const cx = rect.width / 2;
+      const cy = rect.height / 2;
+      const worldX = (cx - panRef.current.x) / zoomRef.current;
+      const worldY = (cy - panRef.current.y) / zoomRef.current;
+      const newPan = { x: cx - worldX * newZoom, y: cy - worldY * newZoom };
+      panRef.current = newPan;
+      setPan(newPan);
+    }
+    zoomRef.current = newZoom;
+    setZoom(newZoom);
+  };
+
+  const handleZoomOut = () => {
+    const newZoom = Math.max(0.1, zoomRef.current * 0.8);
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (rect) {
+      const cx = rect.width / 2;
+      const cy = rect.height / 2;
+      const worldX = (cx - panRef.current.x) / zoomRef.current;
+      const worldY = (cy - panRef.current.y) / zoomRef.current;
+      const newPan = { x: cx - worldX * newZoom, y: cy - worldY * newZoom };
+      panRef.current = newPan;
+      setPan(newPan);
+    }
+    zoomRef.current = newZoom;
+    setZoom(newZoom);
+  };
+
+  /** Beautify Circuit — auto-arrange components in a clean grid layout */
+  const handleBeautifyCircuit = () => {
+    if (components.length === 0) return;
+
+    const GRID_GAP_X = 160;
+    const GRID_GAP_Y = 140;
+    const START_X = 300;
+    const START_Y = 120;
+    const COLS = Math.max(2, Math.ceil(Math.sqrt(components.length)));
+
+    components.forEach((comp, idx) => {
+      const col = idx % COLS;
+      const row = Math.floor(idx / COLS);
+      const newX = START_X + col * GRID_GAP_X;
+      const newY = START_Y + row * GRID_GAP_Y;
+      updateComponent(comp.id, { x: newX, y: newY } as any);
+    });
+
+    // Recalculate wire positions after moving components
+    setTimeout(() => {
+      recalculateAllWirePositions?.();
+    }, 100);
+
+    // Reset view to see the full layout
+    handleResetView();
+  };
+
   // Edit-menu view commands. handleResetView only touches refs/setters, so
   // a one-time registration is safe; zoom goes through the same synthetic
   // wheel call the +/- buttons use, via a latest-ref (handleWheel closes
@@ -3071,6 +3130,51 @@ export const SimulatorCanvas = ({ headerSlot }: SimulatorCanvasProps = {}) => {
                 />
               );
             })()}
+
+          {/* ── Floating Canvas Controls (bottom-right) ── */}
+          <div className="canvas-float-controls">
+            {/* Zoom cluster */}
+            <div className="canvas-ctrl-group">
+              <button
+                className="canvas-ctrl-btn"
+                onClick={handleZoomIn}
+                title="Zoom In"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                  <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+              </button>
+              <button
+                className="canvas-ctrl-btn"
+                onClick={handleZoomOut}
+                title="Zoom Out"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+              </button>
+              <div
+                className="canvas-ctrl-zoom-label"
+                onClick={handleResetView}
+                title="Reset to 100%"
+              >
+                {Math.round(zoom * 100)}%
+              </div>
+            </div>
+
+            {/* Beautify button */}
+            <button
+              className="canvas-beautify-btn"
+              onClick={handleBeautifyCircuit}
+              title="Auto-arrange all components in a clean grid"
+              disabled={components.length === 0}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" />
+              </svg>
+              Beautify
+            </button>
+          </div>
 
           {/* Infinite world — pan+zoom applied here */}
           <div
