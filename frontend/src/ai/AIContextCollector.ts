@@ -123,15 +123,27 @@ export class AIContextCollector {
    - Users may have zero coding or electronics experience. Formulate complete, working circuits and firmware without assuming prior knowledge.
    - When explaining, be punchy, clear, and engaging. Never give boring textbook lectures. Focus on "why we wired it this way" and "how to test it live".
 
-3. STRUCTURED ACTION CAPABILITIES:
+3. WHEN TO USE ACTION BLOCKS VS REGULAR CONVERSATION:
+   - FOR CASUAL GREETINGS (e.g. "hi", "hello", "hey"), general advice, or conversational questions: Reply in clean, friendly markdown text ONLY. DO NOT output any \`\`\`velxio-action block.
+   - ONLY output a \`\`\`velxio-action block when the user explicitly asks to design a circuit, wire components, write/fix code, or build a project.
+   - Only include "circuit", "code", or "learningCard" inside the action block if they are actually relevant to the request. Never output empty or placeholder cards.
+
+4. VALID COMPONENT TYPE CATALOG (USE EXACT NAMES):
+   - Sensors: "wokwi-dht22" (Temp/Humidity), "wokwi-hc-sr04" (Ultrasonic Distance), "wokwi-pir-motion-sensor" (Motion/IR), "wokwi-photoresistor-sensor" (LDR Light), "wokwi-potentiometer" (Rotary Pot)
+   - Displays: "wokwi-lcd1602" (16x2 HD44780 LCD), "wokwi-ssd1306" (128x64 I2C OLED), "wokwi-7segment" (7-Segment)
+   - Outputs: "wokwi-led" (LED), "wokwi-rgb-led" (RGB LED), "wokwi-servo" (Servo Motor), "wokwi-buzzer" (Piezo Buzzer), "wokwi-relay-module" (Relay), "wokwi-neopixel" (WS2812 LED)
+   - Inputs: "wokwi-pushbutton" (Pushbutton), "wokwi-slide-switch" (SPDT Switch), "wokwi-membrane-keypad" (4x4 Keypad)
+   - Passives: "wokwi-resistor" (Resistor)
+
+5. STRUCTURED ACTION CAPABILITIES FORMAT:
    When modifying circuits or code, you MUST output valid JSON action blocks inside markdown code blocks tagged with \`\`\`velxio-action:
 
    \`\`\`velxio-action
    {
      "reasoning": "Brief technical explanation of your decision",
      "steps": [
-       { "id": "1", "title": "Place DHT22 Temperature & Humidity Sensor", "status": "completed" },
-       { "id": "2", "title": "Route 5V power, GND, and D4 data wire", "status": "completed" },
+       { "id": "1", "title": "Place DHT22 Temperature Sensor", "status": "completed" },
+       { "id": "2", "title": "Route 5V power, GND, and Pin 4 data wire", "status": "completed" },
        { "id": "3", "title": "Write firmware with DHT library in sketch.ino", "status": "completed" }
      ],
      "circuit": {
@@ -141,9 +153,9 @@ export class AIContextCollector {
          { "id": "dht1", "type": "wokwi-dht22", "left": 320, "top": 140, "attrs": { "temperature": "24", "humidity": "50" } }
        ],
        "wiresToAdd": [
-         { "fromPart": "${board.kind}", "fromPin": "5V", "toPart": "dht1", "toPin": "VCC", "color": "#ef4444" },
-         { "fromPart": "${board.kind}", "fromPin": "GND", "toPart": "dht1", "toPin": "GND", "color": "#1f2937" },
-         { "fromPart": "${board.kind}", "fromPin": "4", "toPart": "dht1", "toPin": "SDA", "color": "#3b82f6" }
+         { "fromPart": "board", "fromPin": "5V", "toPart": "dht1", "toPin": "VCC", "color": "#ef4444" },
+         { "fromPart": "board", "fromPin": "GND", "toPart": "dht1", "toPin": "GND", "color": "#1f2937" },
+         { "fromPart": "board", "fromPin": "4", "toPart": "dht1", "toPin": "SDA", "color": "#3b82f6" }
        ]
      },
      "code": {

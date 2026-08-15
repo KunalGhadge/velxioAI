@@ -189,7 +189,11 @@ export const useAIStore = create<AIState>()(
                     }
                     if (actionData.steps) steps = actionData.steps;
 
-                    if (actionData.circuit) {
+                    if (
+                      actionData.circuit &&
+                      ((actionData.circuit.componentsToAdd && actionData.circuit.componentsToAdd.length > 0) ||
+                        (actionData.circuit.wiresToAdd && actionData.circuit.wiresToAdd.length > 0))
+                    ) {
                       circuitProposal = {
                         id: `circuit-${Date.now()}`,
                         title: actionData.circuit.title || 'Circuit Modification',
@@ -202,7 +206,7 @@ export const useAIStore = create<AIState>()(
                       };
                     }
 
-                    if (actionData.code) {
+                    if (actionData.code && actionData.code.proposedContent && actionData.code.proposedContent.trim().length > 0) {
                       const activeFile = editorState.files.find((f) => f.name === actionData.code.fileName) || editorState.files[0];
                       codeProposal = {
                         id: `code-${Date.now()}`,
@@ -215,14 +219,14 @@ export const useAIStore = create<AIState>()(
                       };
                     }
 
-                    if (actionData.learningCard) {
+                    if (actionData.learningCard && actionData.learningCard.title && actionData.learningCard.summary) {
                       learningCard = {
                         id: `learn-${Date.now()}`,
                         ...actionData.learningCard,
                       };
                     }
 
-                    if (actionData.bom) {
+                    if (actionData.bom && actionData.bom.items && actionData.bom.items.length > 0) {
                       bomData = {
                         id: `bom-${Date.now()}`,
                         ...actionData.bom,
@@ -294,37 +298,56 @@ export const useAIStore = create<AIState>()(
 
       applyCircuitProposal: (proposal) => {
         const simStore = useSimulatorStore.getState();
+        const registry = ComponentRegistry.getInstance();
+        const board = simStore.boards.find((b) => b.id === simStore.activeBoardId) || simStore.boards[0];
+        const boardId = board?.id || 'uno';
 
-        // 1. Add Components
-        if (proposal.componentsToAdd) {
-          for (const comp of proposal.componentsToAdd) {
-            const metadataId = comp.type.replace(/^wokwi-/, '');
-            const safeId = comp.id || `${metadataId.replace(/-/g, '_')}_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-            
+        // Helper to check if an ID refers to the active MCU board
+        const isBoardRef = (partName: string) => {
+          if (!partName) return false;
+          const p = partName.toLowerCase().replace(/[-_]/g, '');
+          const bKind = (board?.boardKind || '').toLowerCase().replace(/[-_]/g, '');
+          return (
+            p === 'board' ||
+            p === 'arduino' ||
+            p === 'mcu' ||
+            p === 'uno' ||
+            p === 'esp32' ||
+            p === 'pico' ||
+            p === bKind ||
+            p.includes('arduino') ||
+            p.includes('board')
+          );
+        };
+
+        const partIdMap: Record<string, string> = {};
+
+        // 1. Add Components with normalized metadata IDs
+        if (proposal.componentsToAdd && proposal.componentsToAdd.length > 0) {
+          proposal.componentsToAdd.forEach((comp, idx) => {
+            const rawType = (comp.type || 'led').replace(/^(wokwi|velxio)-/, '').toLowerCase();
+            const meta = registry.getById(rawType) || registry.getById('led');
+            const canonicalMetadataId = meta ? meta.id : rawType;
+
+            const safeId = comp.id || `${canonicalMetadataId.replace(/-/g, '_')}_${Date.now()}_${idx}`;
+            partIdMap[comp.id || ''] = safeId;
+            partIdMap[rawType] = safeId;
+
             simStore.recordAddComponent({
               id: safeId,
-              metadataId: metadataId,
-              x: comp.left || 300,
-              y: comp.top || 200,
+              metadataId: canonicalMetadataId,
+              x: comp.left || (280 + (idx % 3) * 140),
+              y: comp.top || (120 + Math.floor(idx / 3) * 120),
               properties: { ...(comp.attrs || {}) },
             });
-          }
+          });
         }
 
-        // 2. Add Wires
-        if (proposal.wiresToAdd) {
-          const board = simStore.boards[0];
-          const boardId = board?.id || 'uno';
-
+        // 2. Add Wires with resolved component IDs
+        if (proposal.wiresToAdd && proposal.wiresToAdd.length > 0) {
           for (const w of proposal.wiresToAdd) {
-            const fromId =
-              w.fromPart === 'board' || w.fromPart === 'arduino' || w.fromPart === 'mcu' || w.fromPart === board?.boardKind
-                ? boardId
-                : w.fromPart;
-            const toId =
-              w.toPart === 'board' || w.toPart === 'arduino' || w.toPart === 'mcu' || w.toPart === board?.boardKind
-                ? boardId
-                : w.toPart;
+            const fromId = isBoardRef(w.fromPart) ? boardId : (partIdMap[w.fromPart] || w.fromPart);
+            const toId = isBoardRef(w.toPart) ? boardId : (partIdMap[w.toPart] || w.toPart);
 
             simStore.recordAddWire({
               id: `wire_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
@@ -339,7 +362,7 @@ export const useAIStore = create<AIState>()(
         // 3. Request recalculation of wire positions
         setTimeout(() => {
           simStore.recalculateAllWirePositions?.();
-        }, 100);
+        }, 150);
 
         proposal.applied = true;
         set((s) => ({ messages: [...s.messages] }));
@@ -347,12 +370,52 @@ export const useAIStore = create<AIState>()(
 
       applyCodeProposal: (proposal) => {
         const editorStore = useEditorStore.getState();
-        const targetFile = editorStore.files.find((f) => f.name === proposal.fileName) || editorStore.files[0];
+        const targetFile =
+          editorStore.files.find((f) => f.name === proposal.fileName) ||
+          editorStore.files.find((f) => f.name.endsWith('.ino') || f.name.endsWith('.py') || f.name.endsWith('.cpp')) ||
+          editorStore.files[0];
 
         if (targetFile) {
           editorStore.setFileContent(targetFile.id, proposal.proposedContent);
         } else {
-          editorStore.createFile(proposal.fileName, proposal.proposedContent);
+          editorStore.createFile(proposal.fileName || 'sketch.ino', proposal.proposedContent);
+        }
+
+        // Auto-detect and add required Arduino libraries to libraries.txt
+        const requiredLibs: string[] = [];
+        if (
+          proposal.proposedContent.includes('LiquidCrystal.h') ||
+          proposal.proposedContent.includes('LiquidCrystal_I2C.h')
+        ) {
+          requiredLibs.push('LiquidCrystal');
+        }
+        if (proposal.proposedContent.includes('DHT.h')) {
+          requiredLibs.push('DHT sensor library');
+        }
+        if (proposal.proposedContent.includes('Adafruit_SSD1306.h')) {
+          requiredLibs.push('Adafruit SSD1306', 'Adafruit GFX Library');
+        }
+        if (proposal.proposedContent.includes('Servo.h')) {
+          requiredLibs.push('Servo');
+        }
+        if (proposal.proposedContent.includes('Adafruit_NeoPixel.h')) {
+          requiredLibs.push('Adafruit NeoPixel');
+        }
+
+        if (requiredLibs.length > 0) {
+          const libFile = editorStore.files.find((f) => f.name === 'libraries.txt');
+          if (libFile) {
+            const existing = libFile.content.split('\n').map((l) => l.trim());
+            const toAdd = requiredLibs.filter((lib) => !existing.includes(lib));
+            if (toAdd.length > 0) {
+              editorStore.setFileContent(libFile.id, `${libFile.content.trim()}\n${toAdd.join('\n')}\n`);
+            }
+          } else {
+            editorStore.createFile(
+              'libraries.txt',
+              `# Libraries automatically installed by VelxioAI\n${requiredLibs.join('\n')}\n`
+            );
+          }
         }
 
         proposal.applied = true;

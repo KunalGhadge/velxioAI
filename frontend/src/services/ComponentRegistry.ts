@@ -299,18 +299,108 @@ export class ComponentRegistry {
   }
 
   /**
-   * Get component by ID
+   * Get component by ID with full alias resolution and fuzzy matching
    */
   getById(id: string): ComponentMetadata | undefined {
+    if (!id) return undefined;
     const hit = this.metadata.get(id);
     if (hit) return hit;
-    // Brand-prefix fallback: gallery templates and older agent-loaded
-    // projects store element tag names ("wokwi-lcd2004") where the registry
-    // keys by the bare id ("lcd2004"). Without this, such a component sits
-    // in the store, gets saved and wired — but never renders, so the user
-    // sees a circuit whose display simply does not exist on screen.
-    const bare = id.replace(/^(wokwi|velxio)-/, '');
-    return bare !== id ? this.metadata.get(bare) : undefined;
+
+    const bare = id.replace(/^(wokwi|velxio)-/, '').toLowerCase().trim();
+    if (this.metadata.get(bare)) return this.metadata.get(bare);
+
+    const ALIAS_MAP: Record<string, string> = {
+      // Sensors
+      'ir-sensor': 'pir-motion-sensor',
+      'irsensor': 'pir-motion-sensor',
+      'infrared': 'pir-motion-sensor',
+      'pir': 'pir-motion-sensor',
+      'pir-sensor': 'pir-motion-sensor',
+      'pir-motion-sensor': 'pir-motion-sensor',
+      'ultrasonic': 'hc-sr04',
+      'ultrasonic-sensor': 'hc-sr04',
+      'hc-sr04': 'hc-sr04',
+      'hcsr04': 'hc-sr04',
+      'distance-sensor': 'hc-sr04',
+      'dht': 'dht22',
+      'dht22': 'dht22',
+      'dht-22': 'dht22',
+      'dht11': 'dht22',
+      'dht-11': 'dht22',
+      'temperature-sensor': 'dht22',
+      'humidity-sensor': 'dht22',
+      'photoresistor': 'photoresistor-sensor',
+      'ldr': 'photoresistor-sensor',
+      'light-sensor': 'photoresistor-sensor',
+      'pot': 'potentiometer',
+      'potentiometer': 'potentiometer',
+      'slider': 'potentiometer',
+
+      // Displays
+      'lcd': 'lcd1602',
+      'lcd-16x2': 'lcd1602',
+      'lcd16x2': 'lcd1602',
+      'lcd1602': 'lcd1602',
+      'lcd-1602': 'lcd1602',
+      '16x2-lcd': 'lcd1602',
+      'lcd2004': 'lcd2004',
+      'lcd-20x4': 'lcd2004',
+      'oled': 'ssd1306',
+      'oled-display': 'ssd1306',
+      'ssd1306': 'ssd1306',
+      '7segment': '7segment',
+      'seven-segment': '7segment',
+
+      // Actuators & Outputs
+      'led': 'led',
+      'red-led': 'led',
+      'green-led': 'led',
+      'blue-led': 'led',
+      'rgb-led': 'rgb-led',
+      'neopixel': 'neopixel',
+      'ws2812': 'neopixel',
+      'ws2812b': 'neopixel',
+      'servo': 'servo',
+      'servo-motor': 'servo',
+      'buzzer': 'buzzer',
+      'piezo': 'buzzer',
+      'speaker': 'buzzer',
+      'relay': 'relay-module',
+      'relay-module': 'relay-module',
+
+      // Controls & Inputs
+      'button': 'pushbutton',
+      'pushbutton': 'pushbutton',
+      'push-button': 'pushbutton',
+      'switch': 'slide-switch',
+      'slide-switch': 'slide-switch',
+      'dip-switch': 'dip-switch-8',
+      'keypad': 'membrane-keypad',
+      'membrane-keypad': 'membrane-keypad',
+
+      // Passives & Breadboards
+      'resistor': 'resistor',
+      '220ohm': 'resistor',
+      '10k-resistor': 'resistor',
+      'capacitor': 'capacitor',
+      'diode': 'diode',
+      'breadboard': 'breadboard-half',
+      'half-breadboard': 'breadboard-half',
+    };
+
+    const alias = ALIAS_MAP[bare] || ALIAS_MAP[bare.replace(/_/g, '-')];
+    if (alias && this.metadata.get(alias)) {
+      return this.metadata.get(alias);
+    }
+
+    // Dynamic search fallback
+    for (const comp of this.allComponents) {
+      if (comp.id === bare || comp.tagName === id || comp.tags.includes(bare)) {
+        return comp;
+      }
+    }
+
+    return undefined;
   }
 
   /**
