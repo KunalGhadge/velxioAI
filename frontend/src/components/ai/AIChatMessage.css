@@ -1,0 +1,121 @@
+.velxio-chat-msg {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid #2d2d2d;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #cccccc;
+}
+
+.velxio-chat-msg.user {
+  background: #252526;
+}
+
+.velxio-chat-msg.assistant {
+  background: #1e1e1e;
+}
+
+.velxio-msg-author {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.velxio-msg-author .badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.velxio-msg-author .badge.ai {
+  background: #007acc;
+  color: #ffffff;
+}
+
+.velxio-msg-author .badge.you {
+  background: #3c3c3c;
+  color: #cccccc;
+}
+
+.velxio-reasoning-dropdown {
+  background: #252526;
+  border: 1px solid #333333;
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: #888888;
+}
+
+.velxio-reasoning-dropdown summary {
+  cursor: pointer;
+  font-weight: 500;
+  color: #aaaaaa;
+  user-select: none;
+}
+
+.velxio-reasoning-dropdown summary:hover {
+  color: #ffffff;
+}
+
+.velxio-reasoning-body {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #333333;
+  white-space: pre-wrap;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: #9cdcfe;
+}
+
+.velxio-steps-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 6px 0;
+}
+
+.velxio-step-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #cccccc;
+}
+
+.velxio-step-item.completed {
+  color: #3fb950;
+}
+
+.velxio-step-icon {
+  font-size: 12px;
+}
+
+.velxio-msg-content {
+  white-space: pre-wrap;
+}
+
+.velxio-msg-content p {
+  margin: 0 0 8px 0;
+}
+
+.velxio-msg-content p:last-child {
+  margin-bottom: 0;
+}
+
+.velxio-msg-content code {
+  background: #2d2d2d;
+  padding: 2px 5px;
+  border-radius: 3px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: #ce9178;
+}

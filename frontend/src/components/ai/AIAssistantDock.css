@@ -1,0 +1,210 @@
+.velxio-ai-dock-container {
+  display: flex;
+  height: 100%;
+  background: #1e1e1e;
+  border-left: 1px solid #333333;
+  position: relative;
+  user-select: none;
+}
+
+.velxio-dock-resize-handle {
+  width: 4px;
+  height: 100%;
+  cursor: col-resize;
+  background: transparent;
+  transition: background 0.15s;
+}
+
+.velxio-dock-resize-handle:hover,
+.velxio-dock-resize-handle.active {
+  background: #007acc;
+}
+
+.velxio-ai-dock {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  height: 100%;
+  overflow: hidden;
+  background: #1e1e1e;
+}
+
+.velxio-ai-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: #252526;
+  border-bottom: 1px solid #333333;
+}
+
+.velxio-ai-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.velxio-ai-model-pill {
+  font-size: 10px;
+  background: #333333;
+  color: #9cdcfe;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid #444444;
+}
+
+.velxio-ai-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.velxio-ai-btn-icon {
+  background: transparent;
+  border: none;
+  color: #888888;
+  padding: 4px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.velxio-ai-btn-icon:hover {
+  background: #333333;
+  color: #ffffff;
+}
+
+.velxio-ai-rollback-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  background: #2d2315;
+  border-bottom: 1px solid #5a3e1b;
+  font-size: 11px;
+  color: #d29922;
+}
+
+.velxio-ai-rollback-btn {
+  background: #d29922;
+  color: #1e1e1e;
+  border: none;
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.velxio-ai-rollback-btn:hover {
+  background: #e3b341;
+}
+
+.velxio-ai-messages {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.velxio-ai-streaming-block {
+  padding: 12px 14px;
+  background: #1e1e1e;
+  border-bottom: 1px solid #2d2d2d;
+  font-size: 13px;
+  color: #cccccc;
+  line-height: 1.5;
+}
+
+.velxio-ai-cursor {
+  display: inline-block;
+  width: 6px;
+  height: 14px;
+  background: #007acc;
+  margin-left: 4px;
+  vertical-align: middle;
+  animation: velxioBlink 0.8s infinite;
+}
+
+@keyframes velxioBlink {
+  50% {
+    opacity: 0;
+  }
+}
+
+.velxio-ai-input-box {
+  padding: 10px 12px;
+  background: #252526;
+  border-top: 1px solid #333333;
+  position: relative;
+}
+
+.velxio-ai-textarea {
+  width: 100%;
+  min-height: 60px;
+  max-height: 160px;
+  background: #1e1e1e;
+  border: 1px solid #3c3c3c;
+  border-radius: 6px;
+  color: #ffffff;
+  padding: 8px 10px;
+  font-family: inherit;
+  font-size: 13px;
+  resize: none;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.velxio-ai-textarea:focus {
+  border-color: #007acc;
+}
+
+.velxio-ai-input-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+}
+
+.velxio-ai-quick-tags {
+  display: flex;
+  gap: 4px;
+}
+
+.velxio-tag-btn {
+  background: #2d2d2d;
+  border: 1px solid #3c3c3c;
+  color: #888888;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.velxio-tag-btn:hover {
+  background: #333333;
+  color: #58a6ff;
+}
+
+.velxio-ai-send-btn {
+  background: #007acc;
+  color: #ffffff;
+  border: none;
+  padding: 5px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.velxio-ai-send-btn:hover:not(:disabled) {
+  background: #0098ff;
+}
+
+.velxio-ai-send-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

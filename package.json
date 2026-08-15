@@ -1,4 +1,10 @@
 {
+  "name": "velxio-ai",
+  "author": "Kunal Ghadge",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/KunalGhadge/velxioAI.git"
+  },
   "devDependencies": {
     "@types/node": "^25.3.3",
     "tsx": "^4.21.0",

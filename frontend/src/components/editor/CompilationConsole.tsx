@@ -5,6 +5,7 @@
 
 import React, { useRef, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useAIStore } from '../../ai/useAIStore';
 import type { CompilationLog, CompileTarget } from '../../utils/compilationLogger';
 
 /** One contiguous run of log lines for the same target (or none). */
@@ -121,12 +122,32 @@ export const CompilationConsole: React.FC<CompilationConsoleProps> = React.memo(
                 ⚠ {warningCount}
               </span>
             )}
-            {/* Pro overlay mounts a "Diagnose with AI" button here when
-                errorCount > 0. Empty in the OSS image — slotMounter
-                only fires when the pro tree is present. */}
             {errorCount > 0 && (
-              <div data-velxio-slot="compile-console-actions" />
+              <button
+                onClick={() => {
+                  useAIStore.getState().toggleDock(true);
+                  useAIStore.getState().sendMessage('/fix The firmware compilation failed with errors. Please analyze the compiler logs and fix the sketch.');
+                }}
+                style={{
+                  background: '#007acc',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: 3,
+                  padding: '2px 8px',
+                  fontSize: 11,
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  marginLeft: 6,
+                }}
+                title="Auto-Fix compilation errors with VelxioAI"
+              >
+                <span>✨ Auto-Fix with AI</span>
+              </button>
             )}
+            <div data-velxio-slot="compile-console-actions" />
           </div>
         </div>
         <div style={styles.headerRight}>

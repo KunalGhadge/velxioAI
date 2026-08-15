@@ -34,6 +34,8 @@ import { useAutoSaveProject } from '../hooks/useAutoSaveProject';
 import { registerEditorCommand } from '../lib/editorCommands';
 import { whenNewsClear } from '../lib/newsGate';
 import { EditorMenuBar } from '../components/editor/EditorMenuBar';
+import { AIAssistantDock } from '../components/ai/AIAssistantDock';
+import { useAIStore } from '../ai/useAIStore';
 import type { CompilationLog } from '../utils/compilationLogger';
 import '../App.css';
 
@@ -111,6 +113,19 @@ export const EditorPage: React.FC = () => {
   }, []);
 
   const [showNewProjectDialog, setShowNewProjectDialog] = useState(false);
+  const { dockOpen, toggleDock } = useAIStore();
+
+  // Global Ctrl+L / Cmd+L listener to toggle VelxioAI Studio
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'l') {
+        e.preventDefault();
+        toggleDock();
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [toggleDock]);
 
   // Pristine-visit starter dialog: a bare /editor landing still holds the
   // hardcoded Uno + LED starter (see useSimulatorStore INITIAL_BOARD /
@@ -538,6 +553,31 @@ export const EditorPage: React.FC = () => {
             />
           </div>
           <div className="unified-toolbar-canvas" ref={setCanvasHeaderSlot} />
+          <button
+            onClick={() => toggleDock()}
+            aria-pressed={dockOpen}
+            title="VelxioAI Studio (Ctrl+L)"
+            style={{
+              background: dockOpen ? '#007acc' : '#252526',
+              color: dockOpen ? '#ffffff' : '#cccccc',
+              border: '1px solid #3c3c3c',
+              borderRadius: 4,
+              height: 28,
+              padding: '0 10px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 5,
+              cursor: 'pointer',
+              fontSize: 12,
+              fontWeight: 500,
+              alignSelf: 'center',
+              margin: '0 6px',
+              flexShrink: 0,
+            }}
+          >
+            <span>✨</span>
+            <span>AI Studio</span>
+          </button>
         </div>
   ) : undefined;
 
@@ -774,6 +814,9 @@ export const EditorPage: React.FC = () => {
             </>
           )}
         </div>
+
+        {/* VelxioAI Studio Right Dock */}
+        <AIAssistantDock />
       </div>
 
       {showStarBanner && (

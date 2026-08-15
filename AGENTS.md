@@ -22,3 +22,8 @@ Always refer to `CLAUDE.md` (`.agents/CLAUDE.md` and `CLAUDE.md`) before proposi
    - `useElectricalStore`: SPICE engine integration.
 4. **Wokwi Libraries**: `@wokwi/elements`, `avr8js`, and `rp2040js` come from npm.
 5. **Backend Compilation**: Stateless FastAPI backend running `arduino-cli` and `espidf` compilers.
+
+## Stability & Anti-Tunnel-Vision Directive
+- **Never Break Existing Features**: All AI capabilities must be non-destructive add-ons that integrate cleanly with existing stores, components, and simulation engines.
+- **Holistic Impact Assessment (No Tunnel Vision)**: If something goes wrong or needs adjustment, always evaluate the full system impact to ensure the solution does not harm other components or introduce regressions in future phases.
+- **Empower Zero-Knowledge Users**: The system must allow users with zero programming or electronics background to design, build, simulate, and learn hardware concepts effortlessly.

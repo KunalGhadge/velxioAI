@@ -1,0 +1,67 @@
+.velxio-diff-card {
+  background: #252526;
+  border: 1px solid #3c3c3c;
+  border-radius: 6px;
+  margin: 10px 0;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace;
+}
+
+.velxio-diff-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: #2d2d2d;
+  border-bottom: 1px solid #333333;
+}
+
+.velxio-diff-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #e0e0e0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.velxio-diff-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.velxio-diff-btn-accept {
+  background: #2ea043;
+  color: #ffffff;
+  border: none;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.velxio-diff-btn-accept:hover {
+  background: #3fb950;
+}
+
+.velxio-diff-btn-applied {
+  background: #333333;
+  color: #3fb950;
+  border: 1px solid #2ea043;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.velxio-diff-content {
+  padding: 10px;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  max-height: 250px;
+  overflow-y: auto;
+  background: #1e1e1e;
+  white-space: pre-wrap;
+  color: #d4d4d4;
+}
