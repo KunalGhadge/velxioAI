@@ -15,7 +15,7 @@ interface Props {
 
 export const AIChatMessage: React.FC<Props> = ({ message }) => {
   const isUser = message.role === 'user';
-  const { openSettingsModal } = useAIStore();
+  const { openSettingsModal, rollbackCheckpoint, checkpointSnapshot } = useAIStore();
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
@@ -101,6 +101,48 @@ export const AIChatMessage: React.FC<Props> = ({ message }) => {
           {message.content}
         </ReactMarkdown>
       </div>
+
+      {/* Auto-Applied Execution Banner */}
+      {(message.circuitProposal || message.codeProposal) && (
+        <div
+          style={{
+            marginTop: 10,
+            padding: '8px 12px',
+            borderRadius: 6,
+            background: 'rgba(34, 197, 94, 0.1)',
+            border: '1px solid rgba(34, 197, 94, 0.25)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 8,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#4ade80' }}>
+            <span>⚡</span>
+            <span>
+              <strong>Auto-Applied to Studio:</strong> Circuit placed on canvas & sketch.ino written.
+            </span>
+          </div>
+          {checkpointSnapshot && (
+            <button
+              onClick={rollbackCheckpoint}
+              style={{
+                background: 'rgba(239, 68, 68, 0.15)',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
+                color: '#f87171',
+                padding: '3px 8px',
+                borderRadius: 4,
+                fontSize: 11,
+                cursor: 'pointer',
+                fontWeight: 500,
+              }}
+              title="Revert all changes made by this AI action"
+            >
+              ↩ Revert
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Quick Settings Shortcut on Error */}
       {(message.error || message.content.includes('Missing API Key') || message.content.includes('API Key')) && message.role === 'assistant' && (

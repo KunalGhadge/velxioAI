@@ -348,6 +348,14 @@ export const useAIStore = create<AIState>()(
                   }
                 }
 
+                // Auto-apply circuit and code proposals autonomously (Cursor IDE mode)
+                if (circuitProposal) {
+                  get().applyCircuitProposal(circuitProposal);
+                }
+                if (codeProposal) {
+                  get().applyCodeProposal(codeProposal);
+                }
+
                 const assistantMsg: AIMessage = {
                   id: `assistant-${Date.now()}`,
                   role: 'assistant',
