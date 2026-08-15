@@ -155,6 +155,38 @@ function safeParseActionJson(rawStr: string): any {
   return Object.keys(result).length > 0 ? result : null;
 }
 
+function extractFirmwareCode(text: string): string | null {
+  if (!text) return null;
+  // Look for code blocks (tagged or untagged)
+  const codeBlockRegex = /```(?:cpp|c|c\+\+|arduino|ino|python|py)?\s*([\s\S]*?)```/gi;
+  let match: RegExpExecArray | null;
+  let candidateCode: string | null = null;
+
+  while ((match = codeBlockRegex.exec(text)) !== null) {
+    const code = match[1].trim();
+    if (code.length > 25) {
+      if (
+        code.includes('setup()') ||
+        code.includes('loop()') ||
+        code.includes('#include') ||
+        code.includes('pinMode') ||
+        code.includes('digitalWrite') ||
+        code.includes('analogRead') ||
+        code.includes('Serial.') ||
+        code.includes('import ') ||
+        code.includes('def ')
+      ) {
+        return code;
+      }
+      if (!candidateCode && code.split('\n').length > 3) {
+        candidateCode = code;
+      }
+    }
+  }
+
+  return candidateCode;
+}
+
 export const useAIStore = create<AIState>()(
   persist(
     (set, get) => ({
@@ -333,17 +365,18 @@ export const useAIStore = create<AIState>()(
 
                 // Fallback: If no codeProposal extracted yet, check for markdown code blocks
                 if (!codeProposal) {
-                  const codeFenceMatch = fullText.match(/```(?:cpp|c|arduino|ino|python|py)\s*([\s\S]*?)\s*```/i);
-                  if (codeFenceMatch && codeFenceMatch[1].trim().length > 30) {
+                  const extractedCode = extractFirmwareCode(fullText);
+                  if (extractedCode) {
+                    const freshEditorState = useEditorStore.getState();
                     const activeFile =
-                      editorState.files.find((f) => f.name.endsWith('.ino') || f.name.endsWith('.py')) ||
-                      editorState.files[0];
+                      freshEditorState.files.find((f) => f.name.endsWith('.ino') || f.name.endsWith('.py')) ||
+                      freshEditorState.files[0];
                     codeProposal = {
                       id: `code-${Date.now()}`,
                       fileId: activeFile?.id || 'sketch.ino',
                       fileName: activeFile?.name || 'sketch.ino',
                       originalContent: activeFile?.content || '',
-                      proposedContent: codeFenceMatch[1].trim(),
+                      proposedContent: extractedCode,
                       summary: 'Generated Firmware Code',
                       applied: false,
                     };
@@ -352,7 +385,8 @@ export const useAIStore = create<AIState>()(
 
                 // Fallback: If no circuitProposal extracted yet, synthesize hardware components & wiring from text
                 if (!circuitProposal && !cleanContent.toLowerCase().startsWith('hi') && !cleanContent.toLowerCase().startsWith('hello')) {
-                  const synth = CircuitSynthesizer.synthesizeFromText(fullText, simState.boards[0]?.boardKind || 'arduino-uno');
+                  const freshSimState = useSimulatorStore.getState();
+                  const synth = CircuitSynthesizer.synthesizeFromText(fullText, freshSimState.boards[0]?.boardKind || 'arduino-uno');
                   if (synth) {
                     circuitProposal = synth;
                   }
@@ -391,7 +425,7 @@ export const useAIStore = create<AIState>()(
                 const errorMsg: AIMessage = {
                   id: `error-${Date.now()}`,
                   role: 'assistant',
-                  content: `❌ **Error**: ${error.message}`,
+                  content: `❌ **Error**: ${error.message || 'Failed to communicate with AI model.'}`,
                   error: error.message,
                   timestamp: Date.now(),
                 };
@@ -512,18 +546,24 @@ export const useAIStore = create<AIState>()(
 
       applyCodeProposal: (proposal) => {
         const editorStore = useEditorStore.getState();
-        const targetFile =
+        const simStore = useSimulatorStore.getState();
+
+        let targetFile =
           editorStore.files.find((f) => f.name === proposal.fileName) ||
           editorStore.files.find((f) => f.name.endsWith('.ino') || f.name.endsWith('.py') || f.name.endsWith('.cpp')) ||
           editorStore.files[0];
 
         if (targetFile) {
           editorStore.setFileContent(targetFile.id, proposal.proposedContent);
+          editorStore.openFile(targetFile.id);
+          editorStore.setActiveFile(targetFile.id);
         } else {
-          editorStore.createFile(proposal.fileName || 'sketch.ino', proposal.proposedContent);
+          const newId = editorStore.createFile(proposal.fileName || 'sketch.ino', proposal.proposedContent);
+          editorStore.openFile(newId);
+          editorStore.setActiveFile(newId);
         }
 
-        // Auto-detect and add required Arduino libraries to libraries.txt
+        // Auto-detect and add required Arduino libraries to libraries.txt and board.libraries
         const requiredLibs: string[] = [];
         if (
           proposal.proposedContent.includes('LiquidCrystal.h') ||
@@ -557,6 +597,14 @@ export const useAIStore = create<AIState>()(
               'libraries.txt',
               `# Libraries automatically installed by VelxioAI\n${requiredLibs.join('\n')}\n`
             );
+          }
+
+          // Register in active simulator board
+          const activeBoard = simStore.boards.find((b) => b.id === simStore.activeBoardId) || simStore.boards[0];
+          if (activeBoard) {
+            const existingLibs = activeBoard.libraries || [];
+            const merged = Array.from(new Set([...existingLibs, ...requiredLibs]));
+            simStore.updateBoard(activeBoard.id, { libraries: merged });
           }
         }
 

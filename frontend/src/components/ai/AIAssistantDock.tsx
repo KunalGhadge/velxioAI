@@ -27,13 +27,22 @@ export const AIAssistantDock: React.FC = () => {
   const [mentionFilter, setMentionFilter] = useState<string | null>(null);
   const [isResizing, setIsResizing] = useState(false);
 
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // Auto-scroll to bottom on new messages
+  // Smooth scroll on new completed message, direct scroll on token stream
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, streamingContent]);
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+    }
+  }, [messages.length, streamingContent]);
+
+  // Clean streaming content (stripping uncompleted or completed velxio-action blocks)
+  const displayStreamingContent = streamingContent
+    .replace(/```velxio-action[\s\S]*?```/g, '')
+    .replace(/```velxio-action[\s\S]*/g, '')
+    .trim();
 
   // Drag to resize handler
   useEffect(() => {
@@ -180,7 +189,7 @@ export const AIAssistantDock: React.FC = () => {
           )}
 
           {/* Messages */}
-          <div className="velxio-ai-messages">
+          <div className="velxio-ai-messages" ref={messagesContainerRef}>
             {messages.length === 0 && !isStreaming && (
               <div className="velxio-ai-empty-state">
                 <div className="velxio-ai-empty-icon">✨</div>
@@ -240,7 +249,7 @@ export const AIAssistantDock: React.FC = () => {
                     <div className="velxio-reasoning-body">{streamingReasoning}</div>
                   </details>
                 )}
-                <span>{streamingContent || 'Analyzing circuit & generating firmware...'}</span>
+                <span>{displayStreamingContent || 'Analyzing circuit & generating firmware...'}</span>
                 <span className="velxio-ai-cursor" />
               </div>
             )}
