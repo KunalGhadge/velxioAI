@@ -22,6 +22,7 @@ import { LLMClient } from './LLMClient';
 import { useSimulatorStore } from '../store/useSimulatorStore';
 import { useEditorStore } from '../store/useEditorStore';
 import { CircuitSynthesizer } from './CircuitSynthesizer';
+import { ComponentRegistry } from '../services/ComponentRegistry';
 
 const DEFAULT_SETTINGS: AISettings = {
   provider: 'gemini',
