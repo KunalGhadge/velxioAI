@@ -274,11 +274,21 @@ export const useAIStore = create<AIState>()(
             }
           );
         } catch (err: any) {
-          set({
+          const errorMsg: AIMessage = {
+            id: `error-${Date.now()}`,
+            role: 'assistant',
+            content: `❌ **Error**: ${err.message || 'Failed to connect to AI provider'}`,
+            error: err.message || 'Connection error',
+            timestamp: Date.now(),
+          };
+
+          set((s) => ({
+            messages: [...s.messages, errorMsg],
             isStreaming: false,
             streamingContent: '',
             streamingReasoning: '',
-          });
+            streamingSteps: [],
+          }));
         }
       },
 

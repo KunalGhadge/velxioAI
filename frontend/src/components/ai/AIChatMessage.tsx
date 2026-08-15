@@ -1,4 +1,6 @@
 import React from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import type { AIMessage } from '../../ai/types';
 import { useAIStore } from '../../ai/useAIStore';
 import { AICodeDiffCard } from './AICodeDiffCard';
@@ -21,7 +23,7 @@ export const AIChatMessage: React.FC<Props> = ({ message }) => {
         <span className={`badge ${isUser ? 'you' : 'ai'}`}>
           {isUser ? 'You' : 'VelxioAI'}
         </span>
-        <span style={{ fontSize: 11, color: '#666666', fontWeight: 400 }}>
+        <span style={{ fontSize: 11, color: '#888888', fontWeight: 400 }}>
           {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
         </span>
       </div>
@@ -51,8 +53,36 @@ export const AIChatMessage: React.FC<Props> = ({ message }) => {
         </div>
       )}
 
-      {/* Message Text Content */}
-      <div className="velxio-msg-content">{message.content}</div>
+      {/* Beautiful Rich Markdown Rendering (No raw asterisks or markdown syntax) */}
+      <div className="velxio-msg-content">
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          components={{
+            p: ({ children }) => <p className="velxio-md-p">{children}</p>,
+            strong: ({ children }) => <strong className="velxio-md-bold">{children}</strong>,
+            em: ({ children }) => <em className="velxio-md-em">{children}</em>,
+            ul: ({ children }) => <ul className="velxio-md-ul">{children}</ul>,
+            ol: ({ children }) => <ol className="velxio-md-ol">{children}</ol>,
+            li: ({ children }) => <li className="velxio-md-li">{children}</li>,
+            h1: ({ children }) => <h3 className="velxio-md-h1">{children}</h3>,
+            h2: ({ children }) => <h4 className="velxio-md-h2">{children}</h4>,
+            h3: ({ children }) => <h5 className="velxio-md-h3">{children}</h5>,
+            code: ({ inline, className, children, ...props }: any) => {
+              return inline ? (
+                <code className="velxio-md-inline-code" {...props}>
+                  {children}
+                </code>
+              ) : (
+                <pre className="velxio-md-code-block">
+                  <code {...props}>{children}</code>
+                </pre>
+              );
+            },
+          }}
+        >
+          {message.content}
+        </ReactMarkdown>
+      </div>
 
       {/* Quick Settings Shortcut on Error */}
       {(message.error || message.content.includes('Missing API Key') || message.content.includes('API Key')) && message.role === 'assistant' && (
@@ -67,7 +97,7 @@ export const AIChatMessage: React.FC<Props> = ({ message }) => {
             fontSize: 12,
             fontWeight: 500,
             cursor: 'pointer',
-            marginTop: 6,
+            marginTop: 8,
             display: 'inline-flex',
             alignItems: 'center',
             gap: 6,
@@ -75,7 +105,7 @@ export const AIChatMessage: React.FC<Props> = ({ message }) => {
           }}
         >
           <span>⚙️</span>
-          <span>Configure API Key</span>
+          <span>Configure API Key in Settings</span>
         </button>
       )}
 

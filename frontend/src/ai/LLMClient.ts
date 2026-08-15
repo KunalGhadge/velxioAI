@@ -291,12 +291,37 @@ export class LLMClient {
   ): Promise<void> {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?key=${apiKey}&alt=sse`;
 
-    const contents = messages
-      .filter((m) => m.role !== 'system')
-      .map((m) => ({
-        role: m.role === 'user' ? 'user' : 'model',
-        parts: [{ text: m.content }],
-      }));
+    // Sanitize and alternate messages strictly for Gemini multiturn requirements
+    const rawHistory = messages.filter((m) => m.content && m.content.trim().length > 0 && m.role !== 'system');
+    const contents: Array<{ role: string; parts: Array<{ text: string }> }> = [];
+
+    for (const msg of rawHistory) {
+      const geminiRole = msg.role === 'user' ? 'user' : 'model';
+      const last = contents[contents.length - 1];
+
+      if (last && last.role === geminiRole) {
+        last.parts[0].text += `\n\n${msg.content.trim()}`;
+      } else {
+        contents.push({
+          role: geminiRole,
+          parts: [{ text: msg.content.trim() }],
+        });
+      }
+    }
+
+    if (contents.length > 0 && contents[0].role !== 'user') {
+      contents.unshift({
+        role: 'user',
+        parts: [{ text: 'Hello, I am asking for help with my hardware circuit.' }],
+      });
+    }
+
+    if (contents.length === 0) {
+      contents.push({
+        role: 'user',
+        parts: [{ text: 'Hello' }],
+      });
+    }
 
     const payload = {
       systemInstruction: {
@@ -432,11 +457,12 @@ export class LLMClient {
     callbacks: StreamCallbacks,
     abortSignal?: AbortSignal
   ): Promise<void> {
+    const filteredMessages = messages.filter((m) => m.content && m.content.trim().length > 0 && m.role !== 'system');
     const formattedMessages = [
       { role: 'system', content: systemPrompt },
-      ...messages.map((m) => ({
+      ...filteredMessages.map((m) => ({
         role: m.role,
-        content: m.content,
+        content: m.content.trim(),
       })),
     ];
 
