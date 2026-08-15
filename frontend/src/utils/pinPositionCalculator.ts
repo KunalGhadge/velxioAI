@@ -48,18 +48,12 @@ export function calculatePinPosition(
   }
 
   if (!element) {
-    if (import.meta.env.MODE !== 'test') {
-      console.warn(`[pinPositionCalculator] Component ${componentId} not found in DOM`);
-    }
     return null;
   }
 
   // Access the pinInfo property (all wokwi-elements expose this)
   const pinInfo = (element as any).pinInfo;
   if (!pinInfo || !Array.isArray(pinInfo)) {
-    if (import.meta.env.MODE !== 'test') {
-      console.warn(`[pinPositionCalculator] Component ${componentId} does not have pinInfo`);
-    }
     return null;
   }
 

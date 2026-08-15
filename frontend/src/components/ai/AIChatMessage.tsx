@@ -76,7 +76,7 @@ export const AIChatMessage: React.FC<Props> = ({ message }) => {
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
           components={{
-            p: ({ children }) => <p className="velxio-md-p">{children}</p>,
+            p: ({ children }) => <div className="velxio-md-p">{children}</div>,
             strong: ({ children }) => <strong className="velxio-md-bold">{children}</strong>,
             em: ({ children }) => <em className="velxio-md-em">{children}</em>,
             ul: ({ children }) => <ul className="velxio-md-ul">{children}</ul>,
@@ -85,15 +85,14 @@ export const AIChatMessage: React.FC<Props> = ({ message }) => {
             h1: ({ children }) => <h3 className="velxio-md-h1">{children}</h3>,
             h2: ({ children }) => <h4 className="velxio-md-h2">{children}</h4>,
             h3: ({ children }) => <h5 className="velxio-md-h3">{children}</h5>,
+            pre: ({ children }) => <pre className="velxio-md-code-block">{children}</pre>,
             code: ({ inline, className, children, ...props }: any) => {
               return inline ? (
                 <code className="velxio-md-inline-code" {...props}>
                   {children}
                 </code>
               ) : (
-                <pre className="velxio-md-code-block">
-                  <code {...props}>{children}</code>
-                </pre>
+                <code {...props}>{children}</code>
               );
             },
           }}
