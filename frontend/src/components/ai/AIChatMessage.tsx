@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { AIMessage } from '../../ai/types';
@@ -16,16 +16,34 @@ interface Props {
 export const AIChatMessage: React.FC<Props> = ({ message }) => {
   const isUser = message.role === 'user';
   const { openSettingsModal } = useAIStore();
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(message.content);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   return (
     <div className={`velxio-chat-msg ${isUser ? 'user' : 'assistant'}`}>
       <div className="velxio-msg-author">
-        <span className={`badge ${isUser ? 'you' : 'ai'}`}>
-          {isUser ? 'You' : 'VelxioAI'}
-        </span>
-        <span style={{ fontSize: 11, color: '#888888', fontWeight: 400 }}>
-          {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span className={`badge ${isUser ? 'you' : 'ai'}`}>
+            {isUser ? 'You' : 'VelxioAI'}
+          </span>
+          <span style={{ fontSize: 11, color: '#888888', fontWeight: 400 }}>
+            {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </span>
+        </div>
+
+        {/* Hover Copy Button */}
+        <button
+          className={`velxio-copy-btn ${copied ? 'copied' : ''}`}
+          onClick={handleCopy}
+          title="Copy message text"
+        >
+          {copied ? '✓ Copied' : '📋 Copy'}
+        </button>
       </div>
 
       {/* Collapsible Reasoning Dropdown */}
@@ -53,7 +71,7 @@ export const AIChatMessage: React.FC<Props> = ({ message }) => {
         </div>
       )}
 
-      {/* Beautiful Rich Markdown Rendering (No raw asterisks or markdown syntax) */}
+      {/* Beautiful Rich Markdown Rendering */}
       <div className="velxio-msg-content">
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}

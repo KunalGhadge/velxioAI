@@ -375,6 +375,7 @@ export const useAIStore = create<AIState>()(
       partialize: (state) => ({
         settings: state.settings,
         dockWidth: state.dockWidth,
+        messages: state.messages.slice(-50),
       }),
     }
   )

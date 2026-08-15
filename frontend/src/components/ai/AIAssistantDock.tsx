@@ -93,6 +93,24 @@ export const AIAssistantDock: React.FC = () => {
     }
   };
 
+  const handleExportChat = () => {
+    if (messages.length === 0) return;
+    const transcript = messages
+      .map(
+        (m) =>
+          `### ${m.role === 'user' ? 'User' : 'VelxioAI'} (${new Date(m.timestamp).toLocaleTimeString()}):\n\n${m.content}\n\n---\n`
+      )
+      .join('\n');
+
+    const blob = new Blob([transcript], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `velxioai-chat-${new Date().toISOString().slice(0, 10)}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const handleSend = () => {
     if (!input.trim() || isStreaming) return;
     sendMessage(input);
@@ -119,6 +137,14 @@ export const AIAssistantDock: React.FC = () => {
               <span className="velxio-ai-model-pill">{settings.selectedModel}</span>
             </div>
             <div className="velxio-ai-actions">
+              <button
+                className="velxio-ai-btn-icon"
+                onClick={handleExportChat}
+                title="Save & Export Chat History (.md)"
+                disabled={messages.length === 0}
+              >
+                💾
+              </button>
               <button
                 className="velxio-ai-btn-icon"
                 onClick={openSettingsModal}

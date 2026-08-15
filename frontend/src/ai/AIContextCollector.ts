@@ -74,10 +74,14 @@ export class AIContextCollector {
 
     // 7. SPICE Node Voltages
     const spiceNodeVoltages: Record<string, number> = {};
-    if (electricalState.nodeVoltages) {
-      electricalState.nodeVoltages.forEach((v, k) => {
-        spiceNodeVoltages[k] = Math.round(v * 100) / 100;
-      });
+    if (electricalState.nodeVoltages && typeof electricalState.nodeVoltages === 'object') {
+      try {
+        Object.entries(electricalState.nodeVoltages).forEach(([k, v]) => {
+          if (typeof v === 'number' && !isNaN(v)) {
+            spiceNodeVoltages[k] = Math.round(v * 100) / 100;
+          }
+        });
+      } catch {}
     }
 
     return {
