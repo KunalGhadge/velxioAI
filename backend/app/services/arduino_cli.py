@@ -5,6 +5,7 @@ import base64
 import shutil
 import re
 import os
+import sys
 from pathlib import Path
 
 from app.core.hooks import materialize_library_scope
@@ -60,7 +61,20 @@ class ArduinoCLIService:
     }
 
     def __init__(self, cli_path: str = "arduino-cli"):
-        self.cli_path = cli_path
+        resolved = shutil.which(cli_path)
+        if not resolved:
+            candidates = [
+                Path(sys.executable).parent / "arduino-cli.exe",
+                Path(sys.executable).parent / "arduino-cli",
+                Path.home() / ".local" / "bin" / "arduino-cli.exe",
+                Path.home() / ".local" / "bin" / "arduino-cli",
+                Path("C:/Program Files/arduino-cli/arduino-cli.exe"),
+            ]
+            for c in candidates:
+                if c.exists():
+                    resolved = str(c)
+                    break
+        self.cli_path = resolved or cli_path
         self._ensure_board_urls()
         self._ensure_core_installed()
 
