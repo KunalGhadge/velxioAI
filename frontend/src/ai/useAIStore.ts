@@ -66,65 +66,91 @@ interface AIState {
 function safeParseActionJson(rawStr: string): any {
   if (!rawStr || !rawStr.trim()) return null;
 
-  let cleaned = rawStr.trim();
+  let str = rawStr.trim();
+  str = str.replace(/^```(?:json|velxio-action)?\s*/i, '').replace(/\s*```$/i, '').trim();
 
-  // 1. Direct parse attempt
+  // Attempt 1: Direct parse
   try {
-    return JSON.parse(cleaned);
+    return JSON.parse(str);
   } catch {}
 
-  // 2. Remove markdown code fences if wrapped inside
-  cleaned = cleaned.replace(/^```(?:json|velxio-action)?\s*/i, '').replace(/\s*```$/, '').trim();
+  // Attempt 2: Strip trailing commas
   try {
-    return JSON.parse(cleaned);
+    const noTrailing = str.replace(/,(\s*[}\]])/g, '$1');
+    return JSON.parse(noTrailing);
   } catch {}
 
-  // 3. Remove trailing commas before } or ]
-  cleaned = cleaned.replace(/,(\s*[}\]])/g, '$1');
+  // Attempt 3: Precise char-by-char string literal newline & tab escaping
   try {
-    return JSON.parse(cleaned);
+    let inString = false;
+    let escaped = false;
+    let result = '';
+
+    for (let i = 0; i < str.length; i++) {
+      const char = str[i];
+      if (char === '"' && !escaped) {
+        inString = !inString;
+        result += char;
+      } else if (inString) {
+        if (char === '\n') {
+          result += '\\n';
+        } else if (char === '\r') {
+          // ignore CR
+        } else if (char === '\t') {
+          result += '\\t';
+        } else {
+          result += char;
+        }
+      } else {
+        result += char;
+      }
+      escaped = char === '\\' && !escaped;
+    }
+
+    result = result.replace(/,(\s*[}\]])/g, '$1');
+    return JSON.parse(result);
   } catch {}
 
-  // 4. Sanitize unescaped newlines inside JSON string literals
-  cleaned = cleaned.replace(/"((?:\\.|[^"\\])*)"/g, (_, p1) => {
-    return '"' + p1.replace(/\r?\n/g, '\\n').replace(/\t/g, '\\t') + '"';
-  });
+  // Attempt 4: Auto-close brackets/braces
   try {
-    return JSON.parse(cleaned);
+    let fixed = str.replace(/,(\s*[}\]])/g, '$1');
+    fixed = fixed.replace(/"((?:\\.|[^"\\])*)"/g, (_, p1) => {
+      return '"' + p1.replace(/\r?\n/g, '\\n').replace(/\t/g, '\\t') + '"';
+    });
+
+    let openBraces = (fixed.match(/{/g) || []).length;
+    let closeBraces = (fixed.match(/}/g) || []).length;
+    while (closeBraces < openBraces) {
+      fixed += '}';
+      closeBraces++;
+    }
+    let openBrackets = (fixed.match(/\[/g) || []).length;
+    let closeBrackets = (fixed.match(/\]/g) || []).length;
+    while (closeBrackets < openBrackets) {
+      fixed += ']';
+      closeBrackets++;
+    }
+
+    return JSON.parse(fixed);
   } catch {}
 
-  // 5. Try closing unclosed JSON structures
-  let openBraces = (cleaned.match(/{/g) || []).length;
-  let closeBraces = (cleaned.match(/}/g) || []).length;
-  while (closeBraces < openBraces) {
-    cleaned += '}';
-    closeBraces++;
-  }
-  let openBrackets = (cleaned.match(/\[/g) || []).length;
-  let closeBrackets = (cleaned.match(/\]/g) || []).length;
-  while (closeBrackets < openBrackets) {
-    cleaned += ']';
-    closeBrackets++;
-  }
-
+  // Attempt 5: Fallback regex extraction
+  const result: any = {};
   try {
-    return JSON.parse(cleaned);
-  } catch {}
-
-  // 6. Fallback regex field extraction for code
-  const extracted: any = {};
-  try {
-    const codeMatch = rawStr.match(/"proposedContent"\s*:\s*"([\s\S]*?)(?:"\s*,\s*"|"\s*})/);
+    const codeMatch = str.match(/"proposedContent"\s*:\s*"([\s\S]*?)(?:"\s*,\s*"|"\s*\}|"$)/);
     if (codeMatch) {
-      extracted.code = {
-        proposedContent: codeMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"'),
+      result.code = {
+        proposedContent: codeMatch[1]
+          .replace(/\\n/g, '\n')
+          .replace(/\\t/g, '\t')
+          .replace(/\\"/g, '"'),
         fileName: 'sketch.ino',
         summary: 'Updated firmware code',
       };
     }
   } catch {}
 
-  return Object.keys(extracted).length > 0 ? extracted : null;
+  return Object.keys(result).length > 0 ? result : null;
 }
 
 export const useAIStore = create<AIState>()(
