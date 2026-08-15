@@ -12,7 +12,7 @@ import { useEditorStore } from '../store/useEditorStore';
 import { useCompileLogsStore } from '../store/useCompileLogsStore';
 import { useElectricalStore } from '../store/useElectricalStore';
 import { BOARD_KIND_LABELS, BOARD_KIND_FQBN } from '../types/board';
-import { verifyCircuit } from '../simulation/verify/circuitVerifier';
+import { ConflictWatchdog } from './tools/conflictWatchdog';
 import type { HardwareContextSnapshot, AISettings } from './types';
 
 export class AIContextCollector {
@@ -62,12 +62,12 @@ export class AIContextCollector {
       typeof l === 'string' ? l : `[${l.severity.toUpperCase()}] ${l.message}`
     );
 
-    // 6. Circuit Safety Verification
-    let circuitWarnings: any[] = [];
+    // 6. Circuit Safety & Conflict Warnings
+    let circuitWarnings: string[] = [];
     try {
-      if (simState.components && simState.wires) {
-        circuitWarnings = verifyCircuit(simState.components, simState.wires, boardKind);
-      }
+      const activeCode = editorState.files.find((f) => f.id === editorState.activeFileId)?.content || '';
+      const conflicts = ConflictWatchdog.analyze(activeCode, simState.wires || [], boardKind);
+      circuitWarnings = conflicts.map((c) => `[${c.severity.toUpperCase()}] ${c.title}: ${c.description}`);
     } catch {
       circuitWarnings = [];
     }

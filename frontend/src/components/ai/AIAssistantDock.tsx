@@ -62,7 +62,7 @@ export const AIAssistantDock: React.FC = () => {
     setInput(val);
 
     const lastWord = val.split(/\s+/).pop() || '';
-    if (lastWord.startsWith('@')) {
+    if (lastWord.startsWith('@') || lastWord.startsWith('/')) {
       setMentionFilter(lastWord);
     } else {
       setMentionFilter(null);
@@ -70,6 +70,13 @@ export const AIAssistantDock: React.FC = () => {
   };
 
   const handleMentionSelect = (tag: string) => {
+    if (tag === '/clear') {
+      clearMessages();
+      setInput('');
+      setMentionFilter(null);
+      return;
+    }
+
     if (!mentionFilter) return;
     const words = input.split(/\s+/);
     words.pop();

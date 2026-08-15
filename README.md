@@ -153,6 +153,43 @@ ESP32 simulation with an HC-SR04 ultrasonic distance sensor — real Xtensa emul
 
 ---
 
+## ⌨️ Keyboard Shortcuts & AI Commands
+
+### Global & Editor Shortcuts
+| Shortcut | Action | Scope |
+| --- | --- | --- |
+| `Ctrl+L` / `Cmd+L` | Toggle VelxioAI Studio dock | Global |
+| `Ctrl+Enter` / `Cmd+Enter` | Compile firmware sketch | Editor |
+| `Ctrl+S` / `Cmd+S` | Save project sketch (.vlx snapshot) | Global |
+| `Ctrl+R` / `Cmd+R` | Start / Stop simulation | Global |
+| `Delete` / `Backspace` | Delete selected component or wire | Canvas |
+| `R` | Rotate selected component 90° | Canvas |
+| `Esc` | Close modal dialogs / cancel wire routing | Global |
+
+### ⚡ AI Studio Slash Commands (`/`)
+| Command | Action |
+| --- | --- |
+| `/fix` | Auto-diagnose and patch compiler errors or circuit wiring faults |
+| `/build` | Generate a complete circuit schematic + firmware from description |
+| `/wire` | Auto-route all power, ground, and GPIO wires on the canvas |
+| `/explain` | Open 2-minute visual hardware insight cards |
+| `/bom` | Generate Bill of Materials & real-world breadboarding steps |
+| `/refactor` | Convert blocking `delay()` loops into non-blocking `millis()` |
+| `/audit` | Run pin conflict watchdog and electrical logic safety analysis |
+| `/clear` | Clear AI Studio conversation history |
+
+### 📎 AI Context Tags (`@`)
+| Tag | Context Attached |
+| --- | --- |
+| `@board` | Current active board specifications, pinout ratings, and architecture |
+| `@circuit` | Complete simulation canvas netlist and wire connections |
+| `@serial` | Live Serial Monitor logs and recent UART outputs |
+| `@errors` | Compiler error diagnostics and SPICE electrical warnings |
+| `@file:<name>` | Specific firmware sketch file content |
+| `@component:<id>` | Specific placed component attributes and pin states |
+
+---
+
 ## Development Setup
 
 **Prerequisites:** Node.js 18+, Python 3.12+, arduino-cli
