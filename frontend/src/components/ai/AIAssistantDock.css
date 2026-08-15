@@ -110,6 +110,62 @@
   flex-direction: column;
 }
 
+.velxio-ai-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 24px 16px;
+  color: #cccccc;
+}
+
+.velxio-ai-empty-icon {
+  font-size: 32px;
+  margin-bottom: 8px;
+}
+
+.velxio-ai-empty-state h4 {
+  margin: 0 0 6px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.velxio-ai-empty-state p {
+  margin: 0 0 16px 0;
+  font-size: 11px;
+  color: #888888;
+  line-height: 1.4;
+}
+
+.velxio-ai-starter-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.velxio-ai-starter-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #252526;
+  border: 1px solid #333333;
+  border-radius: 6px;
+  color: #cccccc;
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s ease;
+}
+
+.velxio-ai-starter-item:hover {
+  background: #2d2d2d;
+  border-color: #007acc;
+  color: #ffffff;
+}
+
 .velxio-ai-streaming-block {
   padding: 12px 14px;
   background: #1e1e1e;

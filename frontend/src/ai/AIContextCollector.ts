@@ -34,11 +34,11 @@ export class AIContextCollector {
     // 2. Placed Components
     const components = (simState.components || []).map((c) => ({
       id: c.id,
-      type: c.type,
-      name: c.name || c.type,
-      x: Math.round(c.left || 0),
-      y: Math.round(c.top || 0),
-      properties: { ...(c.attrs || {}) },
+      type: c.metadataId || (c as any).type,
+      name: (c as any).name || c.metadataId || (c as any).type,
+      x: Math.round((c as any).x || (c as any).left || 0),
+      y: Math.round((c as any).y || (c as any).top || 0),
+      properties: { ...((c as any).properties || (c as any).attrs || {}) },
     }));
 
     // 3. Wires Netlist

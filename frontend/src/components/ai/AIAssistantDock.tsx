@@ -155,6 +155,52 @@ export const AIAssistantDock: React.FC = () => {
 
           {/* Messages */}
           <div className="velxio-ai-messages">
+            {messages.length === 0 && !isStreaming && (
+              <div className="velxio-ai-empty-state">
+                <div className="velxio-ai-empty-icon">✨</div>
+                <h4>Welcome to VelxioAI Studio</h4>
+                <p>Build, simulate, auto-wire, and self-heal embedded hardware with zero prior experience.</p>
+
+                <div className="velxio-ai-starter-list">
+                  <button
+                    className="velxio-ai-starter-item"
+                    onClick={() => sendMessage('Build a basic LED blink circuit with a series resistor')}
+                  >
+                    <span>💡</span>
+                    <span>Wire a Blink LED Circuit</span>
+                  </button>
+                  <button
+                    className="velxio-ai-starter-item"
+                    onClick={() => sendMessage('Build a DHT22 temperature and humidity monitor')}
+                  >
+                    <span>🌡️</span>
+                    <span>DHT22 Temp & Humidity Monitor</span>
+                  </button>
+                  <button
+                    className="velxio-ai-starter-item"
+                    onClick={() => sendMessage('Build an ultrasonic distance sensor with HC-SR04')}
+                  >
+                    <span>📡</span>
+                    <span>HC-SR04 Distance Sensor</span>
+                  </button>
+                  <button
+                    className="velxio-ai-starter-item"
+                    onClick={() => sendMessage('/fix Auto-diagnose and fix all compilation and circuit errors')}
+                  >
+                    <span>🩺</span>
+                    <span>Diagnose & Auto-Fix Errors (/fix)</span>
+                  </button>
+                  <button
+                    className="velxio-ai-starter-item"
+                    onClick={() => sendMessage('/bom Generate Bill of Materials and breadboarding guide')}
+                  >
+                    <span>📦</span>
+                    <span>Generate Bill of Materials (/bom)</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
             {messages.map((msg) => (
               <AIChatMessage key={msg.id} message={msg} />
             ))}

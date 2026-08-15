@@ -288,30 +288,40 @@ export const useAIStore = create<AIState>()(
         // 1. Add Components
         if (proposal.componentsToAdd) {
           for (const comp of proposal.componentsToAdd) {
-            simStore.addComponent(
-              {
-                id: comp.id,
-                name: comp.type.replace('wokwi-', ''),
-                type: comp.type,
-                description: comp.type,
-                category: 'general',
-              },
-              comp.left || 300,
-              comp.top || 200
-            );
+            const metadataId = comp.type.replace(/^wokwi-/, '');
+            const safeId = comp.id || `${metadataId.replace(/-/g, '_')}_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+            
+            simStore.recordAddComponent({
+              id: safeId,
+              metadataId: metadataId,
+              x: comp.left || 300,
+              y: comp.top || 200,
+              properties: { ...(comp.attrs || {}) },
+            });
           }
         }
 
         // 2. Add Wires
         if (proposal.wiresToAdd) {
+          const board = simStore.boards[0];
+          const boardId = board?.id || 'uno';
+
           for (const w of proposal.wiresToAdd) {
-            simStore.addWire({
-              id: `wire-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-              start: { componentId: w.fromPart, pinName: w.fromPin, x: 0, y: 0 },
-              end: { componentId: w.toPart, pinName: w.toPin, x: 0, y: 0 },
+            const fromId =
+              w.fromPart === 'board' || w.fromPart === 'arduino' || w.fromPart === 'mcu' || w.fromPart === board?.boardKind
+                ? boardId
+                : w.fromPart;
+            const toId =
+              w.toPart === 'board' || w.toPart === 'arduino' || w.toPart === 'mcu' || w.toPart === board?.boardKind
+                ? boardId
+                : w.toPart;
+
+            simStore.recordAddWire({
+              id: `wire_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+              start: { componentId: fromId, pinName: w.fromPin, x: 0, y: 0 },
+              end: { componentId: toId, pinName: w.toPin, x: 0, y: 0 },
               waypoints: [],
               color: w.color || '#2563eb',
-              autoRouted: true,
             });
           }
         }
@@ -319,7 +329,7 @@ export const useAIStore = create<AIState>()(
         // 3. Request recalculation of wire positions
         setTimeout(() => {
           simStore.recalculateAllWirePositions?.();
-        }, 50);
+        }, 100);
 
         proposal.applied = true;
         set((s) => ({ messages: [...s.messages] }));
