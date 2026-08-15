@@ -21,6 +21,7 @@ import { AIContextCollector } from './AIContextCollector';
 import { LLMClient } from './LLMClient';
 import { useSimulatorStore } from '../store/useSimulatorStore';
 import { useEditorStore } from '../store/useEditorStore';
+import { CircuitSynthesizer } from './CircuitSynthesizer';
 
 const DEFAULT_SETTINGS: AISettings = {
   provider: 'gemini',
@@ -345,6 +346,14 @@ export const useAIStore = create<AIState>()(
                       summary: 'Generated Firmware Code',
                       applied: false,
                     };
+                  }
+                }
+
+                // Fallback: If no circuitProposal extracted yet, synthesize hardware components & wiring from text
+                if (!circuitProposal && !cleanContent.toLowerCase().startsWith('hi') && !cleanContent.toLowerCase().startsWith('hello')) {
+                  const synth = CircuitSynthesizer.synthesizeFromText(fullText, simState.boards[0]?.boardKind || 'arduino-uno');
+                  if (synth) {
+                    circuitProposal = synth;
                   }
                 }
 
