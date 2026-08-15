@@ -429,9 +429,9 @@ export const useAIStore = create<AIState>()(
         const simStore = useSimulatorStore.getState();
         const registry = ComponentRegistry.getInstance();
         const board = simStore.boards.find((b) => b.id === simStore.activeBoardId) || simStore.boards[0];
-        const boardId = board?.id || 'uno';
+        const boardId = board?.id || 'arduino-uno';
 
-        // Helper to check if an ID refers to the active MCU board
+        // Helper to check if an ID or type refers to the active MCU board
         const isBoardRef = (partName: string) => {
           if (!partName) return false;
           const p = partName.toLowerCase().replace(/[-_]/g, '');
@@ -439,21 +439,34 @@ export const useAIStore = create<AIState>()(
           return (
             p === 'board' ||
             p === 'arduino' ||
+            p === 'arduinouno' ||
             p === 'mcu' ||
             p === 'uno' ||
             p === 'esp32' ||
             p === 'pico' ||
             p === bKind ||
             p.includes('arduino') ||
-            p.includes('board')
+            p.includes('board') ||
+            p.includes('uno')
           );
         };
 
-        const partIdMap: Record<string, string> = {};
+        const partIdMap: Record<string, string> = {
+          board: boardId,
+          arduino: boardId,
+          uno: boardId,
+          'arduino-uno': boardId,
+        };
 
         // 1. Add Components with normalized metadata IDs
         if (proposal.componentsToAdd && proposal.componentsToAdd.length > 0) {
           proposal.componentsToAdd.forEach((comp, idx) => {
+            if (isBoardRef(comp.id) || isBoardRef(comp.type)) {
+              if (comp.id) partIdMap[comp.id] = boardId;
+              if (comp.type) partIdMap[comp.type] = boardId;
+              return;
+            }
+
             const rawType = (comp.type || 'led').replace(/^(wokwi|velxio)-/, '').toLowerCase();
             const meta = registry.getById(rawType) || registry.getById('led');
             const canonicalMetadataId = meta ? meta.id : rawType;

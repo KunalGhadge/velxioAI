@@ -34,14 +34,20 @@ export function calculatePinPosition(
   componentY: number,
   rotation: number = 0,
 ): { x: number; y: number } | null {
-  // Get the DOM element
-  const element = document.getElementById(componentId);
+  // Get the DOM element with fallback for MCU boards
+  let element = document.getElementById(componentId);
   if (!element) {
-    // Don't spam the vitest log: in node-side tests there's no real
-    // DOM and this function gets called per-wire on every render
-    // (each one logs "Component foo not found in DOM"). In a browser
-    // the warning is actionable — a wire references a component that
-    // failed to mount.
+    const lowerId = (componentId || '').toLowerCase().replace(/[-_]/g, '');
+    if (lowerId === 'uno' || lowerId === 'arduinouno' || lowerId === 'arduino' || lowerId === 'board' || lowerId === 'mcu') {
+      element = document.getElementById('arduino-uno') || document.querySelector('wokwi-arduino-uno');
+    } else if (lowerId.includes('esp32')) {
+      element = document.querySelector('wokwi-esp32-devkit-v1') || document.querySelector('velxio-esp32');
+    } else if (lowerId.includes('pico')) {
+      element = document.querySelector('velxio-pi-pico-w') || document.querySelector('wokwi-pi-pico');
+    }
+  }
+
+  if (!element) {
     if (import.meta.env.MODE !== 'test') {
       console.warn(`[pinPositionCalculator] Component ${componentId} not found in DOM`);
     }
@@ -57,26 +63,66 @@ export function calculatePinPosition(
     return null;
   }
 
-  // Find the specific pin
-  let pin = pinInfo.find((p: any) => p.name === pinName);
-  // Fallback: try numbered variant (e.g. GND → GND.1) for pins that have suffix variants
+  const normPin = pinName.trim().toUpperCase();
+
+  // 1. Direct exact or case-insensitive match
+  let pin = pinInfo.find((p: any) => p.name === pinName || (p.name && p.name.toUpperCase() === normPin));
+
+  // 2. Numbered variant fallback (e.g. GND → GND.1, 5V → 5V.1)
   if (!pin && !pinName.includes('.')) {
-    pin = pinInfo.find((p: any) => p.name === `${pinName}.1`);
+    pin = pinInfo.find((p: any) => p.name === `${pinName}.1` || (p.name && p.name.toUpperCase() === `${normPin}.1`));
   }
-  // Fallback: GP-prefix → match description field (e.g. 'GP15' → description 'GPIO15')
-  // Needed for Nano RP2040 Connect which uses D-prefix pin names but GPIO descriptions
-  if (!pin && pinName.startsWith('GP')) {
-    const gpioNum = parseInt(pinName.substring(2), 10);
-    if (!isNaN(gpioNum)) {
-      pin = pinInfo.find((p: any) => p.description === `GPIO${gpioNum}`);
+
+  // 3. Power pin aliases (VCC <-> VDD <-> 5V <-> V+)
+  if (!pin && (normPin === 'VCC' || normPin === 'VDD' || normPin === '5V' || normPin === '3V3' || normPin === 'V+' || normPin === 'PWR')) {
+    const powerCandidates = ['VDD', 'VCC', 'V+', '5V', '5V.1', '3V3', 'VIN', 'V', 'VBUS'];
+    for (const cand of powerCandidates) {
+      pin = pinInfo.find((p: any) => p.name && p.name.toUpperCase() === cand);
+      if (pin) break;
     }
   }
+
+  // 4. Ground pin aliases (GND <-> VSS <-> 0V <-> GROUND)
+  if (!pin && (normPin === 'GND' || normPin === 'VSS' || normPin === '0V' || normPin === 'GROUND' || normPin === 'COM')) {
+    const gndCandidates = ['VSS', 'GND', 'GND.1', 'GND.2', 'GND.3', '0V', 'K'];
+    for (const cand of gndCandidates) {
+      pin = pinInfo.find((p: any) => p.name && p.name.toUpperCase() === cand);
+      if (pin) break;
+    }
+  }
+
+  // 5. LED Anode/Cathode aliases
+  if (!pin && (normPin === 'ANODE' || normPin === '+')) {
+    pin = pinInfo.find((p: any) => p.name && (p.name.toUpperCase() === 'A' || p.name.toUpperCase() === 'ANODE'));
+  }
+  if (!pin && (normPin === 'CATHODE' || normPin === '-')) {
+    pin = pinInfo.find((p: any) => p.name && (p.name.toUpperCase() === 'C' || p.name.toUpperCase() === 'CATHODE'));
+  }
+
+  // 6. Digital pin prefix fallback (e.g. 'D13' <-> '13')
+  if (!pin && normPin.startsWith('D')) {
+    const stripped = normPin.substring(1);
+    pin = pinInfo.find((p: any) => p.name && (p.name.toUpperCase() === stripped || p.name.toUpperCase() === normPin));
+  } else if (!pin && /^\d+$/.test(normPin)) {
+    pin = pinInfo.find((p: any) => p.name && (p.name.toUpperCase() === `D${normPin}` || p.name.toUpperCase() === normPin));
+  }
+
+  // 7. GP-prefix → match description field (e.g. 'GP15' → description 'GPIO15')
+  if (!pin && normPin.startsWith('GP')) {
+    const gpioNum = parseInt(normPin.substring(2), 10);
+    if (!isNaN(gpioNum)) {
+      pin = pinInfo.find((p: any) => p.description && p.description.toUpperCase() === `GPIO${gpioNum}`);
+    }
+  }
+
   if (!pin) {
-    console.warn(`[pinPositionCalculator] Pin ${pinName} not found on component ${componentId}`);
-    console.warn(
-      `Available pins:`,
-      pinInfo.map((p: any) => p.name),
-    );
+    if (import.meta.env.MODE !== 'test') {
+      console.warn(`[pinPositionCalculator] Pin ${pinName} not found on component ${componentId}`);
+      console.warn(
+        `Available pins:`,
+        pinInfo.map((p: any) => p.name),
+      );
+    }
     return null;
   }
 
