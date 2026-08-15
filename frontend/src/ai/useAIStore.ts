@@ -59,6 +59,74 @@ interface AIState {
   rollbackCheckpoint: () => void;
 }
 
+/**
+ * Fault-tolerant JSON parser for LLM action outputs.
+ * Handles unescaped newlines, trailing commas, single quotes, unclosed brackets, etc.
+ */
+function safeParseActionJson(rawStr: string): any {
+  if (!rawStr || !rawStr.trim()) return null;
+
+  let cleaned = rawStr.trim();
+
+  // 1. Direct parse attempt
+  try {
+    return JSON.parse(cleaned);
+  } catch {}
+
+  // 2. Remove markdown code fences if wrapped inside
+  cleaned = cleaned.replace(/^```(?:json|velxio-action)?\s*/i, '').replace(/\s*```$/, '').trim();
+  try {
+    return JSON.parse(cleaned);
+  } catch {}
+
+  // 3. Remove trailing commas before } or ]
+  cleaned = cleaned.replace(/,(\s*[}\]])/g, '$1');
+  try {
+    return JSON.parse(cleaned);
+  } catch {}
+
+  // 4. Sanitize unescaped newlines inside JSON string literals
+  cleaned = cleaned.replace(/"((?:\\.|[^"\\])*)"/g, (_, p1) => {
+    return '"' + p1.replace(/\r?\n/g, '\\n').replace(/\t/g, '\\t') + '"';
+  });
+  try {
+    return JSON.parse(cleaned);
+  } catch {}
+
+  // 5. Try closing unclosed JSON structures
+  let openBraces = (cleaned.match(/{/g) || []).length;
+  let closeBraces = (cleaned.match(/}/g) || []).length;
+  while (closeBraces < openBraces) {
+    cleaned += '}';
+    closeBraces++;
+  }
+  let openBrackets = (cleaned.match(/\[/g) || []).length;
+  let closeBrackets = (cleaned.match(/\]/g) || []).length;
+  while (closeBrackets < openBrackets) {
+    cleaned += ']';
+    closeBrackets++;
+  }
+
+  try {
+    return JSON.parse(cleaned);
+  } catch {}
+
+  // 6. Fallback regex field extraction for code
+  const extracted: any = {};
+  try {
+    const codeMatch = rawStr.match(/"proposedContent"\s*:\s*"([\s\S]*?)(?:"\s*,\s*"|"\s*})/);
+    if (codeMatch) {
+      extracted.code = {
+        proposedContent: codeMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"'),
+        fileName: 'sketch.ino',
+        summary: 'Updated firmware code',
+      };
+    }
+  } catch {}
+
+  return Object.keys(extracted).length > 0 ? extracted : null;
+}
+
 export const useAIStore = create<AIState>()(
   persist(
     (set, get) => ({
@@ -182,8 +250,8 @@ export const useAIStore = create<AIState>()(
                 const actionMatch = fullText.match(/```velxio-action\s*([\s\S]*?)\s*```/);
                 if (actionMatch) {
                   cleanContent = fullText.replace(actionMatch[0], '').trim();
-                  try {
-                    const actionData = JSON.parse(actionMatch[1]);
+                  const actionData = safeParseActionJson(actionMatch[1]);
+                  if (actionData) {
                     if (actionData.reasoning && !reasoningText) {
                       reasoningText = actionData.reasoning;
                     }
@@ -232,8 +300,25 @@ export const useAIStore = create<AIState>()(
                         ...actionData.bom,
                       };
                     }
-                  } catch (e) {
-                    console.error('Failed to parse velxio-action block:', e);
+                  }
+                }
+
+                // Fallback: If no codeProposal extracted yet, check for markdown code blocks
+                if (!codeProposal) {
+                  const codeFenceMatch = fullText.match(/```(?:cpp|c|arduino|ino|python|py)\s*([\s\S]*?)\s*```/i);
+                  if (codeFenceMatch && codeFenceMatch[1].trim().length > 30) {
+                    const activeFile =
+                      editorState.files.find((f) => f.name.endsWith('.ino') || f.name.endsWith('.py')) ||
+                      editorState.files[0];
+                    codeProposal = {
+                      id: `code-${Date.now()}`,
+                      fileId: activeFile?.id || 'sketch.ino',
+                      fileName: activeFile?.name || 'sketch.ino',
+                      originalContent: activeFile?.content || '',
+                      proposedContent: codeFenceMatch[1].trim(),
+                      summary: 'Generated Firmware Code',
+                      applied: false,
+                    };
                   }
                 }
 
