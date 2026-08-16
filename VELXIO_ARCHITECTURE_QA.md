@@ -789,13 +789,314 @@ VelxioAI/
 │   │   └── main.py                             # FastAPI application factory & CORS configuration
 │   ├── tests/                                  # Backend PyTest integration test suite
 │   ├── venv/                                   # Python virtual environment
-│   └── requirements.txt                        # Backend dependencies (FastAPI, Uvicorn, SQLAlchemy)
+│   ├── requirements.txt                        # Backend dependencies (FastAPI, Uvicorn, SQLAlchemy)
 │
 └── scripts/                                    # Build & Metadata Tooling (Level 1)
     ├── generate-component-metadata.ts          # Scans Web Components & builds metadata catalog
     ├── generate-component-svgs.cjs             # Pre-renders component vector icon previews
     └── component-overrides.json                # Custom pin definitions & property overrides
 ```
+
+---
+
+## Question 5: Tool System
+
+**List every function the AI can execute.**
+
+**For each function, show:**
+- Function name
+- Parameters
+- Return value
+
+*Examples: `addComponent()`, `connectPins()`, `createFile()`, `updateFile()`, `compile()`, `startSimulation()`, `stopSimulation()`, `readSerialMonitor()`, `saveCircuit()`.*
+
+---
+
+## Answer 5
+
+### 1. Unified Tool Execution Interface
+
+All tools executed by Velxio's AI engine adhere to the standardized `ToolExecutionResult` interface:
+
+```typescript
+export interface ToolExecutionResult {
+  success: boolean;       // True if tool succeeded without errors
+  message: string;        // Human-readable status or error description
+  data?: any;             // Optional structured payload (IDs, netlists, logs)
+}
+```
+
+---
+
+### 2. Complete Catalog of AI Tools
+
+```
+┌───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                             AI AGENT TOOL SUITE CATALOG                                               │
+├────────────────────┬───────────────────────────────────────────┬───────────────────────────┬──────────────────────────┤
+│ Category           │ Tool Function Name                        │ Parameters                │ Return Type              │
+├────────────────────┼───────────────────────────────────────────┼───────────────────────────┼──────────────────────────┤
+│ 1. File System     │ `AgentToolEngine.writeFile`               │ `(fileName, content)`     │ `Promise<ToolResult>`    │
+│                    │ `AgentToolEngine.readFile`                │ `(fileName)`              │ `string | null`          │
+│                    │ `AgentToolEngine.deleteFile`              │ `(fileName)`              │ `ToolResult`             │
+│                    │ `AgentToolEngine.installLibraries`        │ `(requiredLibs[])`        │ `ToolResult`             │
+├────────────────────┼───────────────────────────────────────────┼───────────────────────────┼──────────────────────────┤
+│ 2. Hardware/Board  │ `AgentToolEngine.setBoard`                │ `(boardKind)`             │ `ToolResult`             │
+├────────────────────┼───────────────────────────────────────────┼───────────────────────────┼──────────────────────────┤
+│ 3. Circuit Canvas  │ `AgentToolEngine.applyCircuit`            │ `(proposal)`              │ `ToolResult`             │
+│                    │ `AgentToolEngine.clearCircuit`            │ `()`                      │ `ToolResult`             │
+│                    │ `AgentToolEngine.beautifyCircuit`         │ `()`                      │ `ToolResult`             │
+│                    │ `sim.recordAddComponent`                  │ `(component)`             │ `void`                   │
+│                    │ `sim.recordAddWire`                       │ `(wire)`                  │ `void`                   │
+│                    │ `sim.recordRemoveComponent`               │ `(id)`                    │ `void`                   │
+│                    │ `sim.recordRemoveWire`                    │ `(id)`                    │ `void`                   │
+├────────────────────┼───────────────────────────────────────────┼───────────────────────────┼──────────────────────────┤
+│ 4. Simulation      │ `AgentToolEngine.compileProject`          │ `()`                      │ `Promise<ToolResult>`    │
+│                    │ `AgentToolEngine.startSimulation`         │ `()`                      │ `ToolResult`             │
+│                    │ `AgentToolEngine.stopSimulation`          │ `()`                      │ `ToolResult`             │
+│                    │ `AgentToolEngine.resetBoard`              │ `()`                      │ `ToolResult`             │
+├────────────────────┼───────────────────────────────────────────┼───────────────────────────┼──────────────────────────┤
+│ 5. Diagnostics     │ `AgentToolEngine.readSerial`              │ `()`                      │ `string`                 │
+│                    │ `AgentToolEngine.writeSerial`             │ `(data)`                  │ `ToolResult`             │
+│                    │ `AgentToolEngine.getCompileLogs`          │ `()`                      │ `string[]`               │
+├────────────────────┼───────────────────────────────────────────┼───────────────────────────┼──────────────────────────┤
+│ 6. Workspace & AI  │ `useAIStore.rollbackCheckpoint`           │ `()`                      │ `void`                   │
+│                    │ `useAIStore.toggleDock`                   │ `(open?: boolean)`        │ `void`                   │
+└────────────────────┴───────────────────────────────────────────┴───────────────────────────┴──────────────────────────┘
+```
+
+---
+
+### 3. Deep-Dive Tool Signatures & Specifications
+
+#### 1. File Management Tools
+
+---
+
+##### `AgentToolEngine.writeFile(fileName, content)` *(Aliases: `createFile`, `updateFile`)*
+Creates a new file or overwrites an existing file in the virtual workspace and focuses it in the Monaco Editor.
+- **Parameters**:
+  - `fileName` (`string`): The target filename (e.g. `"sketch.ino"`, `"config.h"`, `"sensor.cpp"`, `"main.py"`).
+  - `content` (`string`): The full source code content to write.
+- **Return Value**: `Promise<ToolExecutionResult>`
+  ```json
+  { "success": true, "message": "Updated file \"sketch.ino\"", "data": { "id": "file_1" } }
+  ```
+
+---
+
+##### `AgentToolEngine.readFile(fileName)`
+Retrieves the raw text content of a workspace file.
+- **Parameters**:
+  - `fileName` (`string`): Name of the file to inspect.
+- **Return Value**: `string | null` (The file's text content, or `null` if not found).
+
+---
+
+##### `AgentToolEngine.deleteFile(fileName)`
+Deletes a file from the workspace project tree.
+- **Parameters**:
+  - `fileName` (`string`): Name of the file to remove.
+- **Return Value**: `ToolExecutionResult`
+  ```json
+  { "success": true, "message": "Deleted file \"old_header.h\"" }
+  ```
+
+---
+
+##### `AgentToolEngine.installLibraries(requiredLibs)`
+Appends external C++/MicroPython libraries to `libraries.txt` and registers them in the active board manifest.
+- **Parameters**:
+  - `requiredLibs` (`string[]`): Array of library names (e.g. `["LiquidCrystal", "Adafruit SSD1306", "DHT sensor library"]`).
+- **Return Value**: `ToolExecutionResult`
+  ```json
+  { "success": true, "message": "Installed libraries: LiquidCrystal, DHT sensor library", "data": { "libraries": [...] } }
+  ```
+
+---
+
+#### 2. Hardware & Microcontroller Tools
+
+---
+
+##### `AgentToolEngine.setBoard(boardKind)`
+Configures or switches the active microcontroller on the canvas.
+- **Parameters**:
+  - `boardKind` (`BoardKind`): Target board identifier (`"arduino-uno"`, `"arduino-nano"`, `"arduino-mega"`, `"esp32"`, `"esp32-c3"`, `"raspberry-pi-pico"`, `"velxio-raspberry-pi-3"`).
+- **Return Value**: `ToolExecutionResult`
+  ```json
+  { "success": true, "message": "Configured board: arduino-uno" }
+  ```
+
+---
+
+#### 3. Circuit & Wiring Tools
+
+---
+
+##### `AgentToolEngine.applyCircuit(proposal)` *(Aliases: `addComponent`, `connectPins`)*
+Batch-executes a complete circuit proposal: calculates collision-free grid positions, mounts components with canonical metadata IDs, and routes standard color-coded wires.
+- **Parameters**:
+  - `proposal` (`CircuitProposal`):
+    ```typescript
+    interface CircuitProposal {
+      id: string;
+      title: string;
+      description: string;
+      boardKind?: BoardKind;
+      componentsToAdd: { id?: string; type: string; attrs?: Record<string, any> }[];
+      componentsToRemove?: string[];
+      wiresToAdd: { fromPart: string; fromPin: string; toPart: string; toPin: string; color?: string }[];
+      wiresToRemove?: string[];
+    }
+    ```
+- **Return Value**: `ToolExecutionResult`
+  ```json
+  {
+    "success": true,
+    "message": "Built circuit: Visitor Counter Circuit",
+    "data": { "componentsAdded": 2, "wiresAdded": 11 }
+  }
+  ```
+
+---
+
+##### `AgentToolEngine.clearCircuit()`
+Removes all peripheral components and wires from the canvas, leaving only the active microcontroller board.
+- **Parameters**: None `()`
+- **Return Value**: `ToolExecutionResult`
+  ```json
+  { "success": true, "message": "Cleared canvas circuit" }
+  ```
+
+---
+
+##### `AgentToolEngine.beautifyCircuit()`
+Re-arranges all currently placed canvas parts into clean, non-overlapping grid columns and recalculates all wire route bezier curves.
+- **Parameters**: None `()`
+- **Return Value**: `ToolExecutionResult`
+  ```json
+  { "success": true, "message": "Beautified 4 components on canvas" }
+  ```
+
+---
+
+##### `useSimulatorStore.getState().recordAddComponent(component)`
+Direct underlying canvas command that adds a single component to the canvas with undo/redo history tracking.
+- **Parameters**:
+  - `component` (`Component`):
+    ```typescript
+    {
+      id: string;                      // e.g. "led1"
+      metadataId: string;              // e.g. "led"
+      x: number;                       // X pixel coordinate
+      y: number;                       // Y pixel coordinate
+      properties: Record<string, any>; // e.g. { color: "red" }
+    }
+    ```
+- **Return Value**: `void`
+
+---
+
+##### `useSimulatorStore.getState().recordAddWire(wire)`
+Direct underlying canvas command that adds a single wire connection with undo/redo tracking.
+- **Parameters**:
+  - `wire` (`Wire`):
+    ```typescript
+    {
+      id: string;
+      start: { componentId: string; pinName: string; x: number; y: number };
+      end: { componentId: string; pinName: string; x: number; y: number };
+      waypoints: { x: number; y: number }[];
+      color: string;
+    }
+    ```
+- **Return Value**: `void`
+
+---
+
+#### 4. Compiler & Simulation Controls
+
+---
+
+##### `AgentToolEngine.compileProject()` *(Alias: `compile()`)*
+Sends the current workspace source code, multi-file headers, and `libraries.txt` to the backend compiler (`arduino-cli` / `espidf`) and captures diagnostics.
+- **Parameters**: None `()`
+- **Return Value**: `Promise<ToolExecutionResult>`
+  ```json
+  { "success": true, "message": "Compilation succeeded" }
+  ```
+
+---
+
+##### `AgentToolEngine.startSimulation()`
+Starts cycle-accurate microcontroller emulation (`avr8js` / `rp2040js` / `QEMU`) and launches the WASM ngspice analog solver worker.
+- **Parameters**: None `()`
+- **Return Value**: `ToolExecutionResult`
+  ```json
+  { "success": true, "message": "Simulation running" }
+  ```
+
+---
+
+##### `AgentToolEngine.stopSimulation()`
+Halts CPU emulation, pauses the SPICE solver, and freezes all peripheral animation timers.
+- **Parameters**: None `()`
+- **Return Value**: `ToolExecutionResult`
+  ```json
+  { "success": true, "message": "Simulation stopped" }
+  ```
+
+---
+
+##### `AgentToolEngine.resetBoard()`
+Restarts the microcontroller's CPU program counter to address `0x0000`, clears SRAM, and re-initializes attached sensors without stopping the session.
+- **Parameters**: None `()`
+- **Return Value**: `ToolExecutionResult`
+  ```json
+  { "success": true, "message": "Board reset" }
+  ```
+
+---
+
+#### 5. Diagnostics & Serial Monitor Tools
+
+---
+
+##### `AgentToolEngine.readSerial()` *(Alias: `readSerialMonitor()`)*
+Reads the entire buffered text output from the MCU's live UART Serial Monitor.
+- **Parameters**: None `()`
+- **Return Value**: `string` (e.g. `"Visitor count: 12\nTemp: 24.5 C\n"`)
+
+---
+
+##### `AgentToolEngine.writeSerial(data)`
+Transmits raw text/characters into the microcontroller's UART RX input stream.
+- **Parameters**:
+  - `data` (`string`): The string or command to transmit (e.g. `"ON\n"`).
+- **Return Value**: `ToolExecutionResult`
+  ```json
+  { "success": true, "message": "Sent 3 bytes to serial" }
+  ```
+
+---
+
+##### `AgentToolEngine.getCompileLogs()`
+Retrieves compiler diagnostics and error lines from recent build runs for self-healing error analysis.
+- **Parameters**: None `()`
+- **Return Value**: `string[]` (Array of compiler output lines).
+
+---
+
+#### 6. Rollback & Snapshot Safety Tools
+
+---
+
+##### `useAIStore.getState().rollbackCheckpoint()`
+Instantly restores the exact state of files, canvas components, wires, and board settings stashed right before the last AI action was executed.
+- **Parameters**: None `()`
+- **Return Value**: `void`
+
 
 
 
