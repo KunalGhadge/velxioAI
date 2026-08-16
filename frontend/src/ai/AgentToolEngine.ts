@@ -12,6 +12,7 @@ import { ComponentRegistry } from '../services/ComponentRegistry';
 import { runEditorCommand, hasEditorCommand } from '../lib/editorCommands';
 import { CircuitLayoutEngine } from './CircuitLayoutEngine';
 import { CircuitValidator } from './tools/CircuitValidator';
+import { PinAllocator } from './hardware/PinAllocator';
 import type { BoardKind } from '../types/board';
 import type { CircuitProposal, CodeProposal } from './types';
 
@@ -174,9 +175,29 @@ export class AgentToolEngine {
       const sim = useSimulatorStore.getState();
       const registry = ComponentRegistry.getInstance();
 
-      // 0. Pre-Flight Circuit Validation
+      // 0. Deterministic Hardware Pin & Wire Planning
       const currentBoardKind = sim.boards[0]?.boardKind || 'arduino-uno';
-      const validation = CircuitValidator.validate(proposal, proposal.boardKind || currentBoardKind);
+      const targetBoardKind = proposal.boardKind || currentBoardKind;
+
+      let effectiveComponents = proposal.componentsToAdd || [];
+      let effectiveWires = proposal.wiresToAdd || [];
+
+      if ((!effectiveWires || effectiveWires.length === 0) && effectiveComponents.length > 0) {
+        const allocator = new PinAllocator(targetBoardKind);
+        const plan = allocator.buildCompletePlan(targetBoardKind, effectiveComponents, proposal.title);
+        effectiveComponents = plan.componentsToAdd;
+        effectiveWires = plan.wiresToAdd;
+      }
+
+      const activeProposal: CircuitProposal = {
+        ...proposal,
+        boardKind: targetBoardKind,
+        componentsToAdd: effectiveComponents,
+        wiresToAdd: effectiveWires,
+      };
+
+      // 1. Pre-Flight Circuit Validation
+      const validation = CircuitValidator.validate(activeProposal, targetBoardKind);
       if (!validation.valid) {
         return {
           success: false,
@@ -184,23 +205,23 @@ export class AgentToolEngine {
         };
       }
 
-      // 1. Ensure board matches proposal
-      if (proposal.boardKind) {
-        this.setBoard(proposal.boardKind);
+      // 2. Ensure board matches proposal
+      if (activeProposal.boardKind) {
+        this.setBoard(activeProposal.boardKind);
       } else if (sim.boards.length === 0) {
         this.setBoard('arduino-uno');
       }
 
-      // 2. Position board at standard origin
+      // 3. Position board at standard origin
       const currentBoard = sim.boards[0];
       const boardId = currentBoard?.id || 'arduino-uno';
       if (currentBoard) {
         sim.setBoardPosition(CircuitLayoutEngine.BOARD_ORIGIN, currentBoard.id);
       }
 
-      // 3. Remove obsolete components
-      if (proposal.componentsToRemove && proposal.componentsToRemove.length > 0) {
-        proposal.componentsToRemove.forEach((cid) => {
+      // 4. Remove obsolete components
+      if (activeProposal.componentsToRemove && activeProposal.componentsToRemove.length > 0) {
+        activeProposal.componentsToRemove.forEach((cid) => {
           try {
             sim.recordRemoveComponent(cid);
           } catch (e: any) {
@@ -209,10 +230,10 @@ export class AgentToolEngine {
         });
       }
 
-      // 4. Calculate clean grid positions for all new components
+      // 5. Calculate clean grid positions for all new components
       const existingCount = sim.components.length;
       const laidOutComponents = CircuitLayoutEngine.layoutComponents(
-        proposal.componentsToAdd || [],
+        activeProposal.componentsToAdd || [],
         existingCount
       );
 
@@ -261,8 +282,8 @@ export class AgentToolEngine {
         }
       }
 
-      // 5. Connect wires with standardized colors
-      const normalizedWires = CircuitLayoutEngine.normalizeWires(proposal.wiresToAdd || []);
+      // 6. Connect wires with standardized colors
+      const normalizedWires = CircuitLayoutEngine.normalizeWires(activeProposal.wiresToAdd || []);
 
       for (const wire of normalizedWires) {
         const fromId = partIdMap[wire.fromPart] || wire.fromPart;
@@ -298,7 +319,7 @@ export class AgentToolEngine {
 
       return {
         success: true,
-        message: `Built circuit: ${proposal.title || 'Components & Wires Placed'}`,
+        message: `Built circuit: ${activeProposal.title || 'Components & Wires Placed'}`,
         data: {
           componentsAdded: laidOutComponents.length,
           wiresAdded: normalizedWires.length,

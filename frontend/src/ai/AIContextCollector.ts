@@ -156,23 +156,10 @@ ${pinDictionaryMarkdown}
      ],
      "circuit": {
        "title": "Visitor Counter Circuit",
-       "description": "IR sensor on pin 7 and 16x2 LCD display",
+       "description": "IR sensor and 16x2 LCD display",
        "componentsToAdd": [
          { "id": "pir1", "type": "wokwi-pir-motion-sensor" },
          { "id": "lcd1", "type": "wokwi-lcd1602" }
-       ],
-       "wiresToAdd": [
-         { "fromPart": "board", "fromPin": "5V", "toPart": "pir1", "toPin": "VCC", "color": "#ef4444" },
-         { "fromPart": "board", "fromPin": "GND", "toPart": "pir1", "toPin": "GND", "color": "#1f2937" },
-         { "fromPart": "board", "fromPin": "7", "toPart": "pir1", "toPin": "OUT", "color": "#10b981" },
-         { "fromPart": "board", "fromPin": "5V", "toPart": "lcd1", "toPin": "VDD", "color": "#ef4444" },
-         { "fromPart": "board", "fromPin": "GND", "toPart": "lcd1", "toPin": "VSS", "color": "#1f2937" },
-         { "fromPart": "board", "fromPin": "12", "toPart": "lcd1", "toPin": "RS", "color": "#3b82f6" },
-         { "fromPart": "board", "fromPin": "11", "toPart": "lcd1", "toPin": "E", "color": "#8b5cf6" },
-         { "fromPart": "board", "fromPin": "5", "toPart": "lcd1", "toPin": "D4", "color": "#10b981" },
-         { "fromPart": "board", "fromPin": "4", "toPart": "lcd1", "toPin": "D5", "color": "#f59e0b" },
-         { "fromPart": "board", "fromPin": "3", "toPart": "lcd1", "toPin": "D6", "color": "#ec4899" },
-         { "fromPart": "board", "fromPin": "2", "toPart": "lcd1", "toPin": "D7", "color": "#06b6d4" }
        ]
      },
      "code": {

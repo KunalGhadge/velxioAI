@@ -7,6 +7,8 @@
  */
 
 import { ComponentRegistry } from '../../services/ComponentRegistry';
+import { BoardCapabilityRegistry } from '../hardware/BoardCapabilityRegistry';
+import { HardwareComponentRegistry } from '../hardware/HardwareComponentRegistry';
 import type { CircuitProposal } from '../types';
 
 export interface ValidationIssue {
@@ -23,11 +25,7 @@ export interface CircuitValidationResult {
   issues: ValidationIssue[];
 }
 
-/**
- * Authoritative Pin Dictionary for all supported hardware components
- */
 export const COMPONENT_PIN_DEFINITIONS: Record<string, string[]> = {
-  // Sensors
   'wokwi-hc-sr04': ['VCC', 'TRIG', 'ECHO', 'GND'],
   'wokwi-dht22': ['VCC', 'SDA', 'NC', 'GND'],
   'wokwi-pir-motion-sensor': ['VCC', 'OUT', 'GND'],
@@ -36,33 +34,22 @@ export const COMPONENT_PIN_DEFINITIONS: Record<string, string[]> = {
   'wokwi-ds18b20': ['GND', 'DQ', 'VDD'],
   'wokwi-mpu6050': ['VCC', 'GND', 'SCL', 'SDA', 'XDA', 'XCL', 'AD0', 'INT'],
   'wokwi-bmp280': ['VCC', 'GND', 'SCL', 'SDA', 'CSB', 'SDO'],
-
-  // Displays
   'wokwi-lcd1602': ['VSS', 'VDD', 'V0', 'RS', 'RW', 'E', 'D0', 'D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'A', 'K'],
   'wokwi-ssd1306': ['VCC', 'GND', 'SCL', 'SDA'],
   'wokwi-7segment': ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'DP', 'COM.1', 'COM.2', 'DIG1', 'DIG2', 'DIG3', 'DIG4'],
   'wokwi-ili9341': ['VCC', 'GND', 'CS', 'RESET', 'DC', 'MOSI', 'SCK', 'LED', 'MISO'],
-
-  // Outputs & Actuators
   'wokwi-led': ['A', 'C'],
   'wokwi-rgb-led': ['R', 'COM', 'G', 'B', 'ANODE', 'CATHODE'],
   'wokwi-servo': ['GND', 'V+', 'PWM'],
   'wokwi-buzzer': ['1', '2'],
   'wokwi-relay-module': ['VCC', 'GND', 'IN', 'NO', 'COM', 'NC'],
   'wokwi-neopixel': ['VDD', 'DIN', 'GND', 'DOUT'],
-
-  // Inputs
   'wokwi-pushbutton': ['1.l', '1.r', '2.l', '2.r', '1', '2'],
   'wokwi-slide-switch': ['1', '2', '3', 'COM'],
   'wokwi-membrane-keypad': ['R1', 'R2', 'R3', 'R4', 'C1', 'C2', 'C3', 'C4'],
-
-  // Passives
   'wokwi-resistor': ['1', '2'],
 };
 
-/**
- * Standard pin definitions for MCU boards
- */
 export const BOARD_PIN_DEFINITIONS: Record<string, string[]> = {
   'arduino-uno': [
     '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13',
