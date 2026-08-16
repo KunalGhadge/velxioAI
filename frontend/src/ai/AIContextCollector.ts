@@ -189,7 +189,7 @@ CURRENT WORKSPACE CONTEXT
 - Placed Components: ${snapshot.components.length > 0 ? JSON.stringify(snapshot.components) : 'None (Canvas is empty)'}
 - Current Wires: ${snapshot.wires.length > 0 ? JSON.stringify(snapshot.wires) : 'None'}
 - Workspace Files: ${snapshot.files.map((f) => f.name).join(', ')}
-${activeFile ? `- Active File (${activeFile.name}):\n\`\`\`cpp\n${activeFile.content.slice(0, 1000)}\n\`\`\`` : ''}
+${activeFile ? `- Active File (${activeFile.name}):\n\`\`\`cpp\n${activeFile.content}\n\`\`\`` : ''}
 ${snapshot.circuitWarnings && snapshot.circuitWarnings.length > 0 ? `- Circuit Warnings: ${JSON.stringify(snapshot.circuitWarnings)}` : ''}
 ${snapshot.compileLogs && snapshot.compileLogs.length > 0 ? `- Recent Compiler Logs:\n${snapshot.compileLogs.join('\n')}` : ''}
 ${serialSnippet ? `- Recent Serial Monitor Output:\n${serialSnippet}` : ''}

@@ -41,6 +41,7 @@ interface AIStoreState {
   dockWidth: number;
   selectedTemplateId: string | null;
   checkpointSnapshot: WorkspaceSnapshot | null;
+  repairAttempts: number;
 
   // Actions
   setDockOpen: (open: boolean) => void;
@@ -48,7 +49,7 @@ interface AIStoreState {
   setDockWidth: (width: number) => void;
   updateSettings: (partial: Partial<AISettings>) => void;
   setApiKey: (provider: any, key: string) => void;
-  sendMessage: (promptText: string) => Promise<void>;
+  sendMessage: (promptText: string, options?: { isAutoRepair?: boolean }) => Promise<void>;
   clearMessages: () => void;
   applyCircuitProposal: (proposal: CircuitProposal) => void;
   applyCodeProposal: (proposal: CodeProposal) => void;
@@ -202,6 +203,7 @@ export const useAIStore = create<AIStoreState>()(
       dockWidth: 420,
       selectedTemplateId: null,
       checkpointSnapshot: null,
+      repairAttempts: 0,
 
       setDockOpen: (open) => set({ dockOpen: open }),
       toggleDock: (open?: boolean) => set((s) => ({ dockOpen: open !== undefined ? open : !s.dockOpen })),
@@ -224,9 +226,28 @@ export const useAIStore = create<AIStoreState>()(
 
       clearMessages: () => set({ messages: [] }),
 
-      sendMessage: async (promptText: string) => {
+      sendMessage: async (promptText: string, options?: { isAutoRepair?: boolean }) => {
         const state = get();
         if (state.isStreaming || !promptText.trim()) return;
+
+        // Auto-heal bounded attempt guard (max 3 attempts)
+        const isAutoRepair = Boolean(options?.isAutoRepair || promptText.includes('COMPILATION ERROR DETECTED'));
+        if (isAutoRepair) {
+          if (state.repairAttempts >= 3) {
+            const maxAttemptsMsg: AIMessage = {
+              id: `system-${Date.now()}`,
+              role: 'assistant',
+              content: `⚠️ **Auto-Repair Halted**: Maximum automated repair attempts (3) reached for this error. Please inspect the compiler output and modify the code manually.`,
+              timestamp: Date.now(),
+            };
+            set((s) => ({ messages: [...s.messages, maxAttemptsMsg] }));
+            return;
+          }
+          set((s) => ({ repairAttempts: s.repairAttempts + 1 }));
+        } else {
+          // Reset repair counter on manual user prompt
+          set({ repairAttempts: 0 });
+        }
 
         // 1. Stash Workspace Snapshot for 1-Click Rollback
         const simState = useSimulatorStore.getState();
@@ -245,59 +266,55 @@ export const useAIStore = create<AIStoreState>()(
           timestamp: Date.now(),
         };
 
-        const updatedMessages = [...state.messages, userMsg];
-
-        set({
-          messages: updatedMessages,
+        set((s) => ({
+          messages: [...s.messages, userMsg],
           isStreaming: true,
           streamingContent: '',
           streamingReasoning: '',
           streamingSteps: [],
           checkpointSnapshot: checkpoint,
-        });
+        }));
 
         try {
           // 2. Gather Real-Time Context
           const snapshot = AIContextCollector.captureSnapshot();
           const systemPrompt = AIContextCollector.buildSystemPrompt(snapshot, state.settings);
 
-          const chatPayload = updatedMessages.map((m) => ({
-            role: m.role,
-            content: m.content,
-          }));
-
-          let accumulatedText = '';
-          let accumulatedReasoning = '';
+          let fullText = '';
+          let reasoningText = '';
 
           await LLMClient.streamMessage(
-            systemPrompt,
-            chatPayload,
             state.settings,
+            systemPrompt,
+            state.messages,
+            userMsg.content,
             {
-              onToken: (chunk) => {
-                accumulatedText += chunk;
-                set({ streamingContent: accumulatedText });
+              onToken: (token) => {
+                fullText += token;
+                set({ streamingContent: fullText });
               },
-              onReasoning: (chunk) => {
-                accumulatedReasoning += chunk;
-                set({ streamingReasoning: accumulatedReasoning });
+              onReasoning: (reasoning) => {
+                reasoningText += reasoning;
+                set({ streamingReasoning: reasoningText });
               },
-              onComplete: (fullText, fullReasoning) => {
+              onComplete: () => {
                 // 3. Resilient Action Extraction
                 const { cleanContent, actionData } = extractVelxioAction(fullText);
 
+                let steps: ActionStep[] = [];
                 let circuitProposal: CircuitProposal | undefined;
                 let codeProposal: CodeProposal | undefined;
                 let learningCard: HardwareLearningCardData | undefined;
                 let bomData: HardwareBOMData | undefined;
-                let steps: ActionStep[] | undefined;
-                let reasoningText = fullReasoning;
 
                 if (actionData) {
-                  if (actionData.reasoning && !reasoningText) {
-                    reasoningText = actionData.reasoning;
+                  if (actionData.steps && Array.isArray(actionData.steps)) {
+                    steps = actionData.steps.map((st: any, i: number) => ({
+                      id: st.id || String(i + 1),
+                      title: st.title || 'Execute Step',
+                      status: st.status || 'completed',
+                    }));
                   }
-                  if (actionData.steps) steps = actionData.steps;
 
                   // Board switch
                   if (actionData.boardKind) {
@@ -325,7 +342,8 @@ export const useAIStore = create<AIStoreState>()(
 
                   // Code Synthesis
                   if (actionData.code && actionData.code.proposedContent && actionData.code.proposedContent.trim().length > 0) {
-                    const activeFile = editorState.files.find((f) => f.name === actionData.code.fileName) || editorState.files[0];
+                    const freshEditorState = useEditorStore.getState();
+                    const activeFile = freshEditorState.files.find((f) => f.name === actionData.code.fileName) || freshEditorState.files[0];
                     codeProposal = {
                       id: `code-${Date.now()}`,
                       fileId: activeFile?.id || 'sketch.ino',
@@ -354,37 +372,6 @@ export const useAIStore = create<AIStoreState>()(
                     bomData = {
                       id: `bom-${Date.now()}`,
                       ...actionData.bom,
-                    };
-                  }
-                }
-
-                // Fallback for code: If LLM output markdown code block in an action-oriented query
-                const isActionQuery =
-                  promptText.toLowerCase().includes('create') ||
-                  promptText.toLowerCase().includes('build') ||
-                  promptText.toLowerCase().includes('write') ||
-                  promptText.toLowerCase().includes('code') ||
-                  promptText.toLowerCase().includes('make') ||
-                  promptText.toLowerCase().includes('fix') ||
-                  promptText.toLowerCase().includes('counter') ||
-                  promptText.toLowerCase().includes('sensor') ||
-                  promptText.toLowerCase().includes('led');
-
-                if (!codeProposal && isActionQuery) {
-                  const extractedCode = extractFirmwareCode(fullText);
-                  if (extractedCode) {
-                    const freshEditorState = useEditorStore.getState();
-                    const activeFile =
-                      freshEditorState.files.find((f) => f.name.endsWith('.ino') || f.name.endsWith('.py')) ||
-                      freshEditorState.files[0];
-                    codeProposal = {
-                      id: `code-${Date.now()}`,
-                      fileId: activeFile?.id || 'sketch.ino',
-                      fileName: activeFile?.name || 'sketch.ino',
-                      originalContent: activeFile?.content || '',
-                      proposedContent: extractedCode,
-                      summary: 'Generated Firmware Code',
-                      applied: false,
                     };
                   }
                 }

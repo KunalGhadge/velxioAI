@@ -222,13 +222,23 @@ export class AgentToolEngine {
           partIdMap[rawType] = safeId;
           if (comp.type) partIdMap[comp.type] = safeId;
 
-          sim.recordAddComponent({
-            id: safeId,
-            metadataId: canonicalMetadataId,
-            x: comp.left || (380 + (idx % 3) * 190),
-            y: comp.top || (80 + Math.floor(idx / 3) * 150),
-            properties: { ...(comp.attrs || (comp as any).properties || {}) },
-          });
+          const existingComp = sim.components.find((c) => c.id === safeId);
+          if (existingComp) {
+            sim.updateComponent(safeId, {
+              properties: {
+                ...existingComp.properties,
+                ...(comp.attrs || (comp as any).properties || {}),
+              },
+            });
+          } else {
+            sim.recordAddComponent({
+              id: safeId,
+              metadataId: canonicalMetadataId,
+              x: comp.left || (380 + (idx % 3) * 190),
+              y: comp.top || (80 + Math.floor(idx / 3) * 150),
+              properties: { ...(comp.attrs || (comp as any).properties || {}) },
+            });
+          }
         } catch (e) {
           console.warn(`[AgentToolEngine] Failed to add component ${comp.id}:`, e);
         }
@@ -241,6 +251,20 @@ export class AgentToolEngine {
         try {
           const fromId = partIdMap[wire.fromPart] || wire.fromPart;
           const toId = partIdMap[wire.toPart] || wire.toPart;
+
+          // Prevent duplicate wire connections between same pins
+          const wireExists = sim.wires.some(
+            (w) =>
+              (w.start.componentId === fromId &&
+                w.start.pinName === wire.fromPin &&
+                w.end.componentId === toId &&
+                w.end.pinName === wire.toPin) ||
+              (w.start.componentId === toId &&
+                w.start.pinName === wire.toPin &&
+                w.end.componentId === fromId &&
+                w.end.pinName === wire.fromPin)
+          );
+          if (wireExists) return;
 
           sim.recordAddWire({
             id: `wire_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
