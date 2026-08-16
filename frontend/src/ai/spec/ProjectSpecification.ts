@@ -14,6 +14,9 @@ import { PinAllocator, type HardwarePinAssignment } from '../hardware/PinAllocat
 import { PinAssignmentRegistry } from '../hardware/PinAssignmentRegistry';
 import { LibraryResolver } from '../compiler/LibraryResolver';
 import { CircuitValidator } from '../tools/CircuitValidator';
+import { HardwareKnowledgeGraph } from '../knowledge/HardwareKnowledgeGraph';
+import { SemanticProjectValidator } from '../semantic/SemanticProjectValidator';
+import { FirmwareTemplateEngine } from '../firmware/FirmwareTemplateEngine';
 import type { CircuitProposal, CodeProposal } from '../types';
 
 export interface ProjectSpecification {
@@ -58,7 +61,7 @@ export class ProjectSpecificationEngine {
       });
     });
 
-    // Ensure all required components from RequirementExtractor are present
+    // Ensure all required components from RequirementExtractor & Knowledge Graph are present
     requirements.requiredComponents.forEach((reqTag, idx) => {
       const alreadyPresent = Array.from(componentsMap.values()).some((c) => c.type === reqTag);
       if (!alreadyPresent) {
@@ -83,18 +86,20 @@ export class ProjectSpecificationEngine {
 
     const componentsToAdd = Array.from(componentsMap.values());
 
-    // 4. Deterministic Hardware Pin Allocation & Netlist Synthesis
+    // 4. Semantic Validation (Rejects invalid hardware domains)
+    const semanticCheck = SemanticProjectValidator.validate(prompt, componentsToAdd);
+
+    // 5. Deterministic Hardware Pin Allocation & Netlist Synthesis
     const allocator = new PinAllocator(recommendedBoard as any);
     const hardwarePlan = allocator.buildCompletePlan(recommendedBoard, componentsToAdd, prompt);
 
-    // 5. Deterministic Library Dependency Resolution
-    const generatedLibraries = LibraryResolver.resolveAll(
+    // 6. Deterministic Library Dependency Resolution via Knowledge Graph
+    const generatedLibraries = HardwareKnowledgeGraph.resolveLibraries(
       hardwarePlan.componentsToAdd,
-      existingCode,
       hardwarePlan.wiresToAdd
     );
 
-    // 6. Pre-Flight Circuit Validation
+    // 7. Pre-Flight Circuit Validation
     const circuitProposal: CircuitProposal = {
       id: `circuit-${Date.now()}`,
       title: `${prompt.slice(0, 40)}...`,
@@ -105,15 +110,13 @@ export class ProjectSpecificationEngine {
 
     const circuitValidation = CircuitValidator.validate(circuitProposal, recommendedBoard as any);
 
-    // 7. Deterministic Firmware Skeleton & Pin/Library Synchronization
-    const generatedFirmware = this.generateCanonicalFirmware(
+    // 8. Deterministic Template-Based Firmware Generation (Zero LLM guesswork)
+    const generatedFirmware = FirmwareTemplateEngine.generateFirmware({
+      board: recommendedBoard,
+      pinAssignments: PinAssignmentRegistry.getInstance().getAllAssignments(),
+      components: hardwarePlan.componentsToAdd,
       prompt,
-      recommendedBoard,
-      hardwarePlan.componentsToAdd,
-      hardwarePlan.wiresToAdd,
-      generatedLibraries,
-      existingCode
-    );
+    });
 
     return {
       id: specId,
@@ -128,7 +131,7 @@ export class ProjectSpecificationEngine {
       generatedNetlist: hardwarePlan.wiresToAdd,
       generatedFirmware,
       subsystems,
-      validationPassed: circuitValidation.valid,
+      validationPassed: circuitValidation.valid && semanticCheck.valid,
     };
   }
 

@@ -30,9 +30,12 @@ export class RequirementExtractor {
     { regex: /\b(servo|sg90|servo\s*motor|mg90s)\b/i, tag: 'wokwi-servo', name: 'Servo Motor' },
     { regex: /\b(buzzer|piezo|speaker|beeper|alarm\s*sound)\b/i, tag: 'wokwi-buzzer', name: 'Piezo Buzzer' },
     { regex: /\b(relay|relay\s*module|mains\s*switch)\b/i, tag: 'wokwi-relay-module', name: 'Relay Module' },
-    { regex: /\b(button|push\s*button|tactile\s*switch|momentary)\b/i, tag: 'wokwi-pushbutton', name: 'Pushbutton' },
+    { regex: /\b(mq-?2|gas|smoke|methane|lpg|air\s*quality)\s*(sensor|detector|alarm)?\b/i, tag: 'wokwi-mq2', name: 'MQ-2 Gas Sensor' },
+    { regex: /\b(keypad|membrane\s*keypad|matrix\s*keypad|pinpad|4x4\s*keypad)\b/i, tag: 'wokwi-membrane-keypad', name: '4x4 Keypad' },
+    { regex: /\b(rtc|ds1307|ds3231|real\s*time\s*clock|clock\s*module|digital\s*clock)\b/i, tag: 'wokwi-ds1307', name: 'DS1307 RTC' },
+    { regex: /\b(button|push\s*button|tactile\s*switch|momentary|voting|vote)\b/i, tag: 'wokwi-pushbutton', name: 'Pushbutton' },
     { regex: /\b(rgb|rgb\s*led|neopixel|ws2812)\b/i, tag: 'wokwi-rgb-led', name: 'RGB LED' },
-    { regex: /\b(led|traffic\s*light|blinking\s*light|indicator)\b/i, tag: 'wokwi-led', name: 'LED' },
+    { regex: /\b(led|traffic\s*light|blinking\s*light|indicator|flasher|lamp)\b/i, tag: 'wokwi-led', name: 'LED' },
   ];
 
   /**

@@ -8,6 +8,7 @@
 
 import { CompilationErrorClassifier, type CompilationFailure } from './CompilationErrorClassifier';
 import { RepairPlanner } from './RepairPlanner';
+import { DeterministicRepairEngine } from './DeterministicRepairEngine';
 import { AgentToolEngine } from '../AgentToolEngine';
 import { useEditorStore } from '../../store/useEditorStore';
 import { useCompileLogsStore } from '../../store/useCompileLogsStore';
@@ -74,31 +75,36 @@ export class AutoRecompileLoop {
       console.warn(`[AutoRecompileLoop] Attempt ${attempt} encountered ${latestErrors.length} failure(s):`, latestErrors);
 
       // 4. Formulate Deterministic Repair Plan
-      const editorState = useEditorStore.getState();
-      const activeFile = editorState.files.find((f) => f.id === editorState.activeFileId) || editorState.files[0];
-      const codeContent = activeFile ? activeFile.content : '';
+      const deterministicReport = DeterministicRepairEngine.repair(logStrings.join('\n'));
+      if (deterministicReport.repaired) {
+        deterministicReport.actionsApplied.forEach((act) => repairHistory.push(`Attempt ${attempt}: ${act}`));
+      } else {
+        const editorState = useEditorStore.getState();
+        const activeFile = editorState.files.find((f) => f.id === editorState.activeFileId) || editorState.files[0];
+        const codeContent = activeFile ? activeFile.content : '';
 
-      const libFile = editorState.files.find((f) => f.name === 'libraries.txt');
-      const installedLibs = libFile ? libFile.content.split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#')) : [];
+        const libFile = editorState.files.find((f) => f.name === 'libraries.txt');
+        const installedLibs = libFile ? libFile.content.split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#')) : [];
 
-      const plan = RepairPlanner.plan(latestErrors, codeContent, installedLibs);
+        const plan = RepairPlanner.plan(latestErrors, codeContent, installedLibs);
 
-      if (!plan.hasExecutablePlan) {
-        console.warn('[AutoRecompileLoop] No automated repair action available for classified failures.');
-        break;
-      }
+        if (!plan.hasExecutablePlan) {
+          console.warn('[AutoRecompileLoop] No automated repair action available for classified failures.');
+          break;
+        }
 
-      // 5. Apply Repair Actions Deterministically
-      const { updatedCode, updatedLibraries } = RepairPlanner.applyPlan(plan, codeContent, installedLibs);
+        // 5. Apply Repair Actions Deterministically
+        const { updatedCode, updatedLibraries } = RepairPlanner.applyPlan(plan, codeContent, installedLibs);
 
-      if (activeFile && updatedCode !== codeContent) {
-        AgentToolEngine.writeFile(activeFile.name, updatedCode);
-        repairHistory.push(`Attempt ${attempt}: Updated "${activeFile.name}" with synchronized headers and pin mappings.`);
-      }
+        if (activeFile && updatedCode !== codeContent) {
+          AgentToolEngine.writeFile(activeFile.name, updatedCode);
+          repairHistory.push(`Attempt ${attempt}: Updated "${activeFile.name}" with synchronized headers and pin mappings.`);
+        }
 
-      if (updatedLibraries.length > installedLibs.length) {
-        AgentToolEngine.installLibraries(updatedLibraries);
-        repairHistory.push(`Attempt ${attempt}: Installed libraries [${updatedLibraries.join(', ')}] into libraries.txt.`);
+        if (updatedLibraries.length > installedLibs.length) {
+          AgentToolEngine.installLibraries(updatedLibraries);
+          repairHistory.push(`Attempt ${attempt}: Installed libraries [${updatedLibraries.join(', ')}] into libraries.txt.`);
+        }
       }
 
       // Small delay before recompiling

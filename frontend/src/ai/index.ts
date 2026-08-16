@@ -25,9 +25,14 @@ export * from './hardware/HardwareComponentRegistry';
 export * from './hardware/PinAllocator';
 export * from './hardware/PinAssignmentRegistry';
 export * from './hardware/ComponentAliasRegistry';
+export * from './knowledge/HardwareKnowledgeGraph';
 
-// Firmware Synchronization & Dependencies
+// Semantic Validation & Verification
+export * from './semantic/SemanticProjectValidator';
+
+// Firmware Synchronization & Deterministic Templates
 export * from './firmware/LibraryDependencyManager';
+export * from './firmware/FirmwareTemplateEngine';
 
 // Validation & Auto-Healing
 export * from './tools/CircuitValidator';
@@ -39,8 +44,10 @@ export * from './requirements/ComponentConstraintValidator';
 
 // Compiler Error Classification, Library Resolution & Deterministic Repair
 export * from './compiler/CompilationErrorClassifier';
+export * from './compiler/CompilerDiagnosticEngine';
 export * from './compiler/LibraryResolver';
 export * from './compiler/RepairPlanner';
+export * from './compiler/DeterministicRepairEngine';
 export * from './compiler/AutoRecompileLoop';
 
 // Simulation Testing & Runtime Verification
