@@ -270,6 +270,110 @@ export class CircuitValidator {
       }
     }
 
+    // 4. Validate Complete Connectivity (Unconnected Inputs & Unpowered Sensors)
+    if (
+      proposal.wiresToAdd &&
+      Array.isArray(proposal.wiresToAdd) &&
+      proposal.wiresToAdd.length > 0 &&
+      proposal.componentsToAdd &&
+      Array.isArray(proposal.componentsToAdd)
+    ) {
+      // Map of componentId -> Set of uppercase connected pin names
+      const wiredPinsByComponent = new Map<string, Set<string>>();
+
+      for (const wire of proposal.wiresToAdd) {
+        const fromPart = wire.fromPart || 'board';
+        const toPart = wire.toPart;
+        const fromPin = (wire.fromPin || '').toUpperCase();
+        const toPin = (wire.toPin || '').toUpperCase();
+
+        if (!wiredPinsByComponent.has(fromPart)) wiredPinsByComponent.set(fromPart, new Set());
+        wiredPinsByComponent.get(fromPart)!.add(fromPin);
+
+        if (!wiredPinsByComponent.has(toPart)) wiredPinsByComponent.set(toPart, new Set());
+        wiredPinsByComponent.get(toPart)!.add(toPin);
+      }
+
+      for (const comp of proposal.componentsToAdd) {
+        if (!comp.type) continue;
+        const compId = comp.id || comp.type;
+        const profile = HardwareComponentRegistry.getComponent(comp.type);
+        const connectedPins = wiredPinsByComponent.get(compId) || new Set<string>();
+
+        if (!profile) continue;
+
+        // 4a. Check Unpowered Sensors / Active ICs
+        if (profile.powerPins.vcc) {
+          const vccPin = profile.powerPins.vcc.toUpperCase();
+          if (!connectedPins.has(vccPin)) {
+            const msg = `UNPOWERED SENSOR: Component "${compId}" (${profile.name}) is missing a power connection on pin "${profile.powerPins.vcc}".`;
+            errors.push(msg);
+            issues.push({
+              severity: 'error',
+              code: 'UNPOWERED_SENSOR',
+              message: msg,
+              componentId: compId,
+            });
+          }
+        }
+
+        if (profile.powerPins.gnd) {
+          const gndPin = profile.powerPins.gnd.toUpperCase();
+          if (!connectedPins.has(gndPin)) {
+            const msg = `UNPOWERED SENSOR / NO GROUND: Component "${compId}" (${profile.name}) is missing a ground return path on pin "${profile.powerPins.gnd}".`;
+            errors.push(msg);
+            issues.push({
+              severity: 'error',
+              code: 'UNPOWERED_SENSOR',
+              message: msg,
+              componentId: compId,
+            });
+          }
+        }
+
+        // 4b. Check Unconnected Analog Inputs & Outputs
+        for (const pin of profile.pins) {
+          const pinNameUpper = pin.name.toUpperCase();
+          if (pin.signalType === 'analog_in' || pin.signalType === 'analog_out') {
+            if (!connectedPins.has(pinNameUpper)) {
+              const msg = `UNCONNECTED ANALOG INPUT: Analog signal pin "${pin.name}" on component "${compId}" (${profile.name}) is floating and unconnected.`;
+              errors.push(msg);
+              issues.push({
+                severity: 'error',
+                code: 'UNCONNECTED_ANALOG_INPUT',
+                message: msg,
+                componentId: compId,
+              });
+            }
+          }
+
+          // 4c. Check Unconnected Digital Inputs, Outputs & Bus Lines
+          if (
+            pin.signalType === 'digital_in' ||
+            pin.signalType === 'digital_out' ||
+            pin.signalType === 'pwm_in' ||
+            pin.signalType === 'i2c_sda' ||
+            pin.signalType === 'i2c_scl'
+          ) {
+            // For LCD parallel data pins in 4-bit mode (D0-D3 are optional)
+            if (profile.id === 'wokwi-lcd1602' && ['D0', 'D1', 'D2', 'D3'].includes(pinNameUpper)) {
+              continue;
+            }
+            if (!connectedPins.has(pinNameUpper)) {
+              const msg = `UNCONNECTED DIGITAL PIN: Required digital/bus signal pin "${pin.name}" on component "${compId}" (${profile.name}) is floating and unconnected.`;
+              errors.push(msg);
+              issues.push({
+                severity: 'error',
+                code: 'UNCONNECTED_DIGITAL_INPUT',
+                message: msg,
+                componentId: compId,
+              });
+            }
+          }
+        }
+      }
+    }
+
     return {
       valid: errors.length === 0,
       errors,
