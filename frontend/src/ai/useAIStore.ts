@@ -12,6 +12,7 @@ import { LLMClient } from './LLMClient';
 import { AIContextCollector } from './AIContextCollector';
 import { AgentToolEngine } from './AgentToolEngine';
 import { AutoHealingEngine } from './healing/AutoHealingEngine';
+import { ProjectArchitectureEngine } from './architecture/ProjectArchitectureEngine';
 import { useSimulatorStore } from '../store/useSimulatorStore';
 import { useEditorStore } from '../store/useEditorStore';
 import type {
@@ -384,6 +385,44 @@ export const useAIStore = create<AIStoreState>()(
                       id: `bom-${Date.now()}`,
                       ...actionData.bom,
                     };
+                  }
+                }
+
+                // Autonomous Architecture Synthesis for Natural Language Build Requests
+                if (
+                  !circuitProposal &&
+                  (promptText.toLowerCase().includes('make') ||
+                    promptText.toLowerCase().includes('build') ||
+                    promptText.toLowerCase().includes('create') ||
+                    promptText.toLowerCase().includes('add') ||
+                    promptText.toLowerCase().includes('connect') ||
+                    promptText.toLowerCase().includes('alarm') ||
+                    promptText.toLowerCase().includes('counter') ||
+                    promptText.toLowerCase().includes('traffic'))
+                ) {
+                  const arch = ProjectArchitectureEngine.planProject(promptText);
+                  if (arch.subsystems.length > 0) {
+                    const allComps: Array<{ id: string; type: string }> = [];
+                    arch.subsystems.forEach((sub, sIdx) => {
+                      sub.components.forEach((cTag, cIdx) => {
+                        allComps.push({
+                          id: `${cTag.replace(/^(wokwi|velxio)-/, '').replace(/-/g, '_')}_${sIdx + 1}_${cIdx + 1}`,
+                          type: cTag,
+                        });
+                      });
+                    });
+
+                    if (allComps.length > 0) {
+                      circuitProposal = {
+                        id: `circuit-${Date.now()}`,
+                        title: arch.title,
+                        description: `Autonomous Architecture: ${arch.subsystems.map((s) => s.name).join(', ')}`,
+                        boardKind: arch.recommendedBoard as any,
+                        componentsToAdd: allComps,
+                        wiresToAdd: [],
+                        applied: false,
+                      };
+                    }
                   }
                 }
 
