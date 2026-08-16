@@ -13,6 +13,7 @@ import { useCompileLogsStore } from '../store/useCompileLogsStore';
 import { useElectricalStore } from '../store/useElectricalStore';
 import { BOARD_KIND_LABELS, BOARD_KIND_FQBN } from '../types/board';
 import { ConflictWatchdog } from './tools/conflictWatchdog';
+import { COMPONENT_PIN_DEFINITIONS, BOARD_PIN_DEFINITIONS } from './tools/CircuitValidator';
 import type { HardwareContextSnapshot, AISettings } from './types';
 
 export class AIContextCollector {
@@ -112,6 +113,12 @@ export class AIContextCollector {
     const activeFile = snapshot.files.find((f: any) => f.isActive) || snapshot.files[0];
     const serialSnippet = (snapshot as any).serialOutput || '';
 
+    const boardKey = (board.kind || 'arduino-uno').toLowerCase();
+    const boardPinList = BOARD_PIN_DEFINITIONS[boardKey] || BOARD_PIN_DEFINITIONS['arduino-uno'];
+    const pinDictionaryMarkdown = Object.entries(COMPONENT_PIN_DEFINITIONS)
+      .map(([type, pins]) => `   - "${type}": Pins [${pins.join(', ')}]`)
+      .join('\n');
+
     return `You are VelxioAI, the lead embedded systems engineer and autonomous Studio Agent in the VelxioAI Embedded IDE.
 
 ════════════════════════════════════════════════════════════════
@@ -124,19 +131,13 @@ export class AIContextCollector {
 
 2. DETERMINISTIC HARDWARE PINNING:
    - Target Board: "${board.description}" (kind: "${board.kind}", FQBN: "${board.fqbn}").
-   - NEVER invent phantom pins. Use exact physical pins present on this board:
-     * Arduino Uno/Nano: Digital 0-13, Analog A0-A5, 5V, 3V3, GND, VIN.
-     * ESP32: GPIO 0-39 (ADC1: 32-39, ADC2: 0,2,4,12-15,25-27), 3V3, GND.
-     * Raspberry Pi Pico / RP2040: GP0-GP28, ADC0-ADC3 (GP26-GP29), 3V3, GND.
+   - Available Physical Pins on "${board.description}": [${boardPinList.join(', ')}].
+   - NEVER invent phantom pins. You MUST strictly use physical pins listed above.
    - Always connect digital sensors to digital pins, analog sensors to analog pins (A0-A5), and PWM devices (servos, buzzers) to hardware PWM pins.
    - LEDs MUST connect through a 220Ω resistor to prevent overcurrent.
 
-3. VALID COMPONENT TYPE CATALOG (USE EXACT WOKWI NAMES):
-   - Sensors: "wokwi-dht22" (Temp/Humidity), "wokwi-hc-sr04" (Ultrasonic Distance), "wokwi-pir-motion-sensor" (PIR/IR Motion), "wokwi-photoresistor-sensor" (LDR Light), "wokwi-potentiometer" (Rotary Pot)
-   - Displays: "wokwi-lcd1602" (16x2 HD44780 LCD), "wokwi-ssd1306" (128x64 I2C OLED), "wokwi-7segment" (7-Segment)
-   - Outputs: "wokwi-led" (LED), "wokwi-rgb-led" (RGB LED), "wokwi-servo" (Servo Motor), "wokwi-buzzer" (Piezo Buzzer), "wokwi-relay-module" (Relay), "wokwi-neopixel" (WS2812 LED)
-   - Inputs: "wokwi-pushbutton" (Pushbutton), "wokwi-slide-switch" (SPDT Switch), "wokwi-membrane-keypad" (4x4 Keypad)
-   - Passives: "wokwi-resistor" (Resistor)
+3. HARDWARE COMPONENT PIN DICTIONARY (USE EXACT COMPONENT TYPES AND EXACT PIN NAMES):
+${pinDictionaryMarkdown}
 
 4. STRUCTURED ACTION CAPABILITIES FORMAT:
    When modifying circuits, writing code, or managing files, output a single JSON block enclosed in \`\`\`velxio-action:

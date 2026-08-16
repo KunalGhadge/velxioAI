@@ -11,6 +11,7 @@ import { useCompileLogsStore } from '../store/useCompileLogsStore';
 import { ComponentRegistry } from '../services/ComponentRegistry';
 import { runEditorCommand, hasEditorCommand } from '../lib/editorCommands';
 import { CircuitLayoutEngine } from './CircuitLayoutEngine';
+import { CircuitValidator } from './tools/CircuitValidator';
 import type { BoardKind } from '../types/board';
 import type { CircuitProposal, CodeProposal } from './types';
 
@@ -173,6 +174,16 @@ export class AgentToolEngine {
       const sim = useSimulatorStore.getState();
       const registry = ComponentRegistry.getInstance();
 
+      // 0. Pre-Flight Circuit Validation
+      const currentBoardKind = sim.boards[0]?.boardKind || 'arduino-uno';
+      const validation = CircuitValidator.validate(proposal, proposal.boardKind || currentBoardKind);
+      if (!validation.valid) {
+        return {
+          success: false,
+          message: `Circuit validation rejected proposal:\n${validation.errors.map((e) => `• ${e}`).join('\n')}`,
+        };
+      }
+
       // 1. Ensure board matches proposal
       if (proposal.boardKind) {
         this.setBoard(proposal.boardKind);
@@ -192,7 +203,9 @@ export class AgentToolEngine {
         proposal.componentsToRemove.forEach((cid) => {
           try {
             sim.recordRemoveComponent(cid);
-          } catch {}
+          } catch (e: any) {
+            console.warn(`[AgentToolEngine] Could not remove component ${cid}:`, e?.message);
+          }
         });
       }
 
@@ -211,72 +224,72 @@ export class AgentToolEngine {
         mcu: boardId,
       };
 
-      laidOutComponents.forEach((comp, idx) => {
-        try {
-          const rawType = (comp.type || 'led').replace(/^(wokwi|velxio)-/, '').toLowerCase();
-          const meta = registry.getById(rawType) || registry.getById('led');
-          const canonicalMetadataId = meta ? meta.id : rawType;
-          const safeId = comp.id || `${canonicalMetadataId.replace(/-/g, '_')}_${Date.now()}_${idx}`;
-
-          partIdMap[comp.id || ''] = safeId;
-          partIdMap[rawType] = safeId;
-          if (comp.type) partIdMap[comp.type] = safeId;
-
-          const existingComp = sim.components.find((c) => c.id === safeId);
-          if (existingComp) {
-            sim.updateComponent(safeId, {
-              properties: {
-                ...existingComp.properties,
-                ...(comp.attrs || (comp as any).properties || {}),
-              },
-            });
-          } else {
-            sim.recordAddComponent({
-              id: safeId,
-              metadataId: canonicalMetadataId,
-              x: comp.left || (380 + (idx % 3) * 190),
-              y: comp.top || (80 + Math.floor(idx / 3) * 150),
-              properties: { ...(comp.attrs || (comp as any).properties || {}) },
-            });
-          }
-        } catch (e) {
-          console.warn(`[AgentToolEngine] Failed to add component ${comp.id}:`, e);
+      for (let idx = 0; idx < laidOutComponents.length; idx++) {
+        const comp = laidOutComponents[idx];
+        if (!comp.type || typeof comp.type !== 'string' || comp.type.trim().length === 0) {
+          return {
+            success: false,
+            message: `Component at index ${idx} has an empty or invalid type definition.`,
+          };
         }
-      });
+
+        const rawType = comp.type.replace(/^(wokwi|velxio)-/, '').toLowerCase();
+        const meta = registry.getById(rawType) || registry.getById(comp.type);
+        const canonicalMetadataId = meta ? meta.id : rawType;
+        const safeId = comp.id || `${canonicalMetadataId.replace(/-/g, '_')}_${Date.now()}_${idx}`;
+
+        partIdMap[comp.id || ''] = safeId;
+        partIdMap[rawType] = safeId;
+        if (comp.type) partIdMap[comp.type] = safeId;
+
+        const existingComp = sim.components.find((c) => c.id === safeId);
+        if (existingComp) {
+          sim.updateComponent(safeId, {
+            properties: {
+              ...existingComp.properties,
+              ...(comp.attrs || (comp as any).properties || {}),
+            },
+          });
+        } else {
+          sim.recordAddComponent({
+            id: safeId,
+            metadataId: canonicalMetadataId,
+            x: comp.left || (380 + (idx % 3) * 190),
+            y: comp.top || (80 + Math.floor(idx / 3) * 150),
+            properties: { ...(comp.attrs || (comp as any).properties || {}) },
+          });
+        }
+      }
 
       // 5. Connect wires with standardized colors
       const normalizedWires = CircuitLayoutEngine.normalizeWires(proposal.wiresToAdd || []);
 
-      normalizedWires.forEach((wire) => {
-        try {
-          const fromId = partIdMap[wire.fromPart] || wire.fromPart;
-          const toId = partIdMap[wire.toPart] || wire.toPart;
+      for (const wire of normalizedWires) {
+        const fromId = partIdMap[wire.fromPart] || wire.fromPart;
+        const toId = partIdMap[wire.toPart] || wire.toPart;
 
-          // Prevent duplicate wire connections between same pins
-          const wireExists = sim.wires.some(
-            (w) =>
-              (w.start.componentId === fromId &&
-                w.start.pinName === wire.fromPin &&
-                w.end.componentId === toId &&
-                w.end.pinName === wire.toPin) ||
-              (w.start.componentId === toId &&
-                w.start.pinName === wire.toPin &&
-                w.end.componentId === fromId &&
-                w.end.pinName === wire.fromPin)
-          );
-          if (wireExists) return;
+        // Prevent duplicate wire connections between same pins
+        const wireExists = sim.wires.some(
+          (w) =>
+            (w.start.componentId === fromId &&
+              w.start.pinName === wire.fromPin &&
+              w.end.componentId === toId &&
+              w.end.pinName === wire.toPin) ||
+            (w.start.componentId === toId &&
+              w.start.pinName === wire.toPin &&
+              w.end.componentId === fromId &&
+              w.end.pinName === wire.fromPin)
+        );
+        if (wireExists) continue;
 
-          sim.recordAddWire({
-            id: `wire_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
-            start: { componentId: fromId, pinName: wire.fromPin, x: 0, y: 0 },
-            end: { componentId: toId, pinName: wire.toPin, x: 0, y: 0 },
-            waypoints: [],
-            color: wire.color || '#2563eb',
-          });
-        } catch (e) {
-          console.warn(`[AgentToolEngine] Failed to add wire:`, e);
-        }
-      });
+        sim.recordAddWire({
+          id: `wire_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+          start: { componentId: fromId, pinName: wire.fromPin, x: 0, y: 0 },
+          end: { componentId: toId, pinName: wire.toPin, x: 0, y: 0 },
+          waypoints: [],
+          color: wire.color || '#2563eb',
+        });
+      }
 
       // Recalculate wire geometry after DOM settles
       setTimeout(() => {

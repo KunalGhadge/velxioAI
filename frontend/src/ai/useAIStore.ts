@@ -454,9 +454,20 @@ export const useAIStore = create<AIStoreState>()(
       },
 
       applyCircuitProposal: (proposal) => {
-        AgentToolEngine.applyCircuit(proposal);
-        proposal.applied = true;
-        set((s) => ({ messages: [...s.messages] }));
+        const result = AgentToolEngine.applyCircuit(proposal);
+        if (result.success) {
+          proposal.applied = true;
+          set((s) => ({ messages: [...s.messages] }));
+        } else {
+          const errorMsg: AIMessage = {
+            id: `error-${Date.now()}`,
+            role: 'assistant',
+            content: `⚠️ **Circuit Proposal Rejected by Validator**:\n\n${result.message}`,
+            error: result.message,
+            timestamp: Date.now(),
+          };
+          set((s) => ({ messages: [...s.messages, errorMsg] }));
+        }
       },
 
       applyCodeProposal: (proposal) => {
