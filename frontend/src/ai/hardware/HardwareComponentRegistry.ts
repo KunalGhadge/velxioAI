@@ -300,6 +300,37 @@ export const HARDWARE_COMPONENT_PROFILES: Record<string, HardwareComponentProfil
     ],
     powerPins: { vcc: 'VCC', gnd: 'GND' },
   },
+  'wokwi-rgb-led': {
+    id: 'wokwi-rgb-led',
+    tagName: 'wokwi-rgb-led',
+    name: 'RGB LED (Common Cathode)',
+    category: 'actuators',
+    busType: 'pwm',
+    recommendedVoltage: 5.0,
+    pins: [
+      { name: 'R', signalType: 'pwm_in', description: 'Red Channel Anode' },
+      { name: 'COM', signalType: 'power_gnd', description: 'Common Cathode Ground' },
+      { name: 'GND', signalType: 'power_gnd', description: 'Common Cathode Ground' },
+      { name: 'G', signalType: 'pwm_in', description: 'Green Channel Anode' },
+      { name: 'B', signalType: 'pwm_in', description: 'Blue Channel Anode' },
+    ],
+    powerPins: { gnd: 'COM' },
+  },
+  'wokwi-neopixel': {
+    id: 'wokwi-neopixel',
+    tagName: 'wokwi-neopixel',
+    name: 'WS2812B Addressable RGB NeoPixel',
+    category: 'actuators',
+    busType: 'gpio',
+    recommendedVoltage: 5.0,
+    pins: [
+      { name: 'VDD', signalType: 'power_vcc', description: 'Power (+5V)' },
+      { name: 'DIN', signalType: 'digital_in', description: 'Serial Data In' },
+      { name: 'GND', signalType: 'power_gnd', description: 'Ground' },
+      { name: 'DOUT', signalType: 'digital_out', description: 'Serial Data Out (Cascade)' },
+    ],
+    powerPins: { vcc: 'VDD', gnd: 'GND' },
+  },
 };
 
 import { ComponentAliasRegistry } from './ComponentAliasRegistry';

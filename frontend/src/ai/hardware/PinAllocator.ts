@@ -316,6 +316,22 @@ export class PinAllocator {
         registry.assign(compId, 'D5', d5Pin, 'digital', `${compId.toUpperCase()}_D5_PIN`);
         registry.assign(compId, 'D6', d6Pin, 'digital', `${compId.toUpperCase()}_D6_PIN`);
         registry.assign(compId, 'D7', d7Pin, 'digital', `${compId.toUpperCase()}_D7_PIN`);
+      } else if (profile.id === 'wokwi-rgb-led') {
+        const rPin = this.allocatePWMPin();
+        const gPin = this.allocatePWMPin();
+        const bPin = this.allocatePWMPin();
+
+        wiresToAdd.push({ fromPart: 'board', fromPin: rPin, toPart: compId, toPin: 'R', color: '#ef4444' });
+        wiresToAdd.push({ fromPart: 'board', fromPin: gPin, toPart: compId, toPin: 'G', color: '#10b981' });
+        wiresToAdd.push({ fromPart: 'board', fromPin: bPin, toPart: compId, toPin: 'B', color: '#3b82f6' });
+
+        registry.assign(compId, 'R', rPin, 'pwm', `${compId.toUpperCase()}_RED_PIN`);
+        registry.assign(compId, 'G', gPin, 'pwm', `${compId.toUpperCase()}_GREEN_PIN`);
+        registry.assign(compId, 'B', bPin, 'pwm', `${compId.toUpperCase()}_BLUE_PIN`);
+      } else if (profile.id === 'wokwi-neopixel') {
+        const dataPin = this.allocateDigitalPin('6');
+        wiresToAdd.push({ fromPart: 'board', fromPin: dataPin, toPart: compId, toPin: 'DIN', color: '#10b981' });
+        registry.assign(compId, 'DIN', dataPin, 'digital', `${compId.toUpperCase()}_PIN`);
       }
     }
 

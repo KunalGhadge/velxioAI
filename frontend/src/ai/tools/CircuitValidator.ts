@@ -331,7 +331,24 @@ export class CircuitValidator {
           }
         }
 
-        // 4b. Check Unconnected Analog Inputs & Outputs
+        // 4b. Check Unconnected Analog & Digital Signal Lines
+        const hasDualOutputs = profile.id === 'wokwi-photoresistor-sensor' || profile.id === 'wokwi-sound-sensor';
+        if (hasDualOutputs) {
+          const hasAO = connectedPins.has('AO');
+          const hasDO = connectedPins.has('DO');
+          if (!hasAO && !hasDO) {
+            const msg = `UNCONNECTED SENSOR OUTPUT: Sensor component "${compId}" (${profile.name}) has no signal output connected (neither AO nor DO).`;
+            errors.push(msg);
+            issues.push({
+              severity: 'error',
+              code: 'UNCONNECTED_ANALOG_INPUT',
+              message: msg,
+              componentId: compId,
+            });
+          }
+          continue;
+        }
+
         for (const pin of profile.pins) {
           const pinNameUpper = pin.name.toUpperCase();
           if (pin.signalType === 'analog_in' || pin.signalType === 'analog_out') {
@@ -359,6 +376,7 @@ export class CircuitValidator {
             if (profile.id === 'wokwi-lcd1602' && ['D0', 'D1', 'D2', 'D3'].includes(pinNameUpper)) {
               continue;
             }
+            // For RGB LED pins, they are handled
             if (!connectedPins.has(pinNameUpper)) {
               const msg = `UNCONNECTED DIGITAL PIN: Required digital/bus signal pin "${pin.name}" on component "${compId}" (${profile.name}) is floating and unconnected.`;
               errors.push(msg);
