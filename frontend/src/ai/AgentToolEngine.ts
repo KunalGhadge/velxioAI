@@ -13,6 +13,7 @@ import { runEditorCommand, hasEditorCommand } from '../lib/editorCommands';
 import { CircuitLayoutEngine } from './CircuitLayoutEngine';
 import { CircuitValidator } from './tools/CircuitValidator';
 import { PinAllocator } from './hardware/PinAllocator';
+import { PinAssignmentRegistry } from './hardware/PinAssignmentRegistry';
 import type { BoardKind } from '../types/board';
 import type { CircuitProposal, CodeProposal } from './types';
 
@@ -30,17 +31,25 @@ export class AgentToolEngine {
    */
   public static async writeFile(fileName: string, content: string): Promise<ToolExecutionResult> {
     try {
+      let finalContent = content;
+      if (fileName.endsWith('.ino') || fileName.endsWith('.cpp')) {
+        const pinReg = PinAssignmentRegistry.getInstance();
+        if (pinReg.getAllAssignments().length > 0) {
+          finalContent = pinReg.synchronizeFirmwareCode(content);
+        }
+      }
+
       const editor = useEditorStore.getState();
       const existing = editor.files.find((f) => f.name === fileName);
 
       if (existing) {
-        editor.setFileContent(existing.id, content);
+        editor.setFileContent(existing.id, finalContent);
         editor.openFile(existing.id);
         editor.setActiveFile(existing.id);
         return { success: true, message: `Updated file "${fileName}"`, data: { id: existing.id } };
       } else {
         const newId = editor.createFile(fileName);
-        editor.setFileContent(newId, content);
+        editor.setFileContent(newId, finalContent);
         editor.openFile(newId);
         editor.setActiveFile(newId);
         return { success: true, message: `Created file "${fileName}"`, data: { id: newId } };

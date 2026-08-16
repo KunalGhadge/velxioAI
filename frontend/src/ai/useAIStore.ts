@@ -11,6 +11,7 @@ import { persist } from 'zustand/middleware';
 import { LLMClient } from './LLMClient';
 import { AIContextCollector } from './AIContextCollector';
 import { AgentToolEngine } from './AgentToolEngine';
+import { AutoHealingEngine } from './healing/AutoHealingEngine';
 import { useSimulatorStore } from '../store/useSimulatorStore';
 import { useEditorStore } from '../store/useEditorStore';
 import type {
@@ -454,7 +455,25 @@ export const useAIStore = create<AIStoreState>()(
       },
 
       applyCircuitProposal: (proposal) => {
-        const result = AgentToolEngine.applyCircuit(proposal);
+        let result = AgentToolEngine.applyCircuit(proposal);
+
+        if (!result.success) {
+          // Attempt Auto-Healing
+          const healing = AutoHealingEngine.diagnose(result.message, '', proposal, proposal.boardKind || 'arduino-uno');
+          if (healing.recovered && healing.fixes.length > 0) {
+            for (const fix of healing.fixes) {
+              if (fix.actionPayload?.circuitPatch?.componentsToAdd) {
+                proposal.componentsToAdd = fix.actionPayload.circuitPatch.componentsToAdd as any;
+              }
+              if (fix.actionPayload?.circuitPatch?.wiresToAdd) {
+                proposal.wiresToAdd = fix.actionPayload.circuitPatch.wiresToAdd as any;
+              }
+            }
+            // Retry with healed proposal
+            result = AgentToolEngine.applyCircuit(proposal);
+          }
+        }
+
         if (result.success) {
           proposal.applied = true;
           set((s) => ({ messages: [...s.messages] }));

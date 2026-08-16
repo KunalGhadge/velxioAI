@@ -8,6 +8,7 @@
 
 import { BoardCapabilityRegistry, type BoardCapabilityProfile } from './BoardCapabilityRegistry';
 import { HardwareComponentRegistry, type HardwareComponentProfile } from './HardwareComponentRegistry';
+import { PinAssignmentRegistry } from './PinAssignmentRegistry';
 import type { BoardKind } from '../../types/board';
 import type { CircuitComponentSpec, CircuitWireSpec, CircuitProposal } from '../types';
 
@@ -102,10 +103,11 @@ export class PinAllocator {
     title = 'Synthesized Circuit'
   ): PinAllocationPlan {
     this.reset(boardKind);
+    const registry = PinAssignmentRegistry.getInstance();
+    registry.clear();
 
     const componentsToAdd: CircuitComponentSpec[] = [];
     const wiresToAdd: CircuitWireSpec[] = [];
-    const pinHeaderLines: string[] = [];
 
     const { vcc: boardVcc, gnd: boardGnd } = this.getPowerRailPins(this.boardProfile.systemVoltage);
 
@@ -184,7 +186,7 @@ export class PinAllocator {
           color: '#10b981',
         });
 
-        pinHeaderLines.push(`#define ${compId.toUpperCase()}_PIN ${ledPin}`);
+        registry.assign(compId, 'A', ledPin, 'digital', `${compId.toUpperCase()}_PIN`);
       } else if (profile.id === 'wokwi-hc-sr04') {
         const trigPin = this.allocateDigitalPin('9');
         const echoPin = this.allocateDigitalPin('10');
@@ -205,8 +207,8 @@ export class PinAllocator {
           color: '#8b5cf6', // Purple
         });
 
-        pinHeaderLines.push(`#define ${compId.toUpperCase()}_TRIG ${trigPin}`);
-        pinHeaderLines.push(`#define ${compId.toUpperCase()}_ECHO ${echoPin}`);
+        registry.assign(compId, 'TRIG', trigPin, 'digital', `${compId.toUpperCase()}_TRIG_PIN`);
+        registry.assign(compId, 'ECHO', echoPin, 'digital', `${compId.toUpperCase()}_ECHO_PIN`);
       } else if (profile.id === 'wokwi-dht22') {
         const dataPin = this.allocateDigitalPin('2');
         wiresToAdd.push({
@@ -216,7 +218,7 @@ export class PinAllocator {
           toPin: 'SDA',
           color: '#f59e0b', // Yellow
         });
-        pinHeaderLines.push(`#define ${compId.toUpperCase()}_PIN ${dataPin}`);
+        registry.assign(compId, 'SDA', dataPin, 'digital', `${compId.toUpperCase()}_PIN`);
       } else if (profile.id === 'wokwi-pir-motion-sensor') {
         const outPin = this.allocateDigitalPin('7');
         wiresToAdd.push({
@@ -226,7 +228,7 @@ export class PinAllocator {
           toPin: 'OUT',
           color: '#10b981', // Green
         });
-        pinHeaderLines.push(`#define ${compId.toUpperCase()}_PIN ${outPin}`);
+        registry.assign(compId, 'OUT', outPin, 'digital', `${compId.toUpperCase()}_PIN`);
       } else if (profile.id === 'wokwi-servo') {
         const pwmPin = this.allocatePWMPin();
         wiresToAdd.push({
@@ -236,7 +238,7 @@ export class PinAllocator {
           toPin: 'PWM',
           color: '#f59e0b', // Orange/Yellow
         });
-        pinHeaderLines.push(`#define ${compId.toUpperCase()}_PIN ${pwmPin}`);
+        registry.assign(compId, 'PWM', pwmPin, 'pwm', `${compId.toUpperCase()}_PIN`);
       } else if (profile.id === 'wokwi-buzzer') {
         const pwmPin = this.allocatePWMPin();
         wiresToAdd.push({
@@ -246,7 +248,7 @@ export class PinAllocator {
           toPin: '1',
           color: '#ec4899', // Pink
         });
-        pinHeaderLines.push(`#define ${compId.toUpperCase()}_PIN ${pwmPin}`);
+        registry.assign(compId, '1', pwmPin, 'pwm', `${compId.toUpperCase()}_PIN`);
       } else if (profile.id === 'wokwi-photoresistor-sensor') {
         const analogPin = this.allocateAnalogPin();
         wiresToAdd.push({
@@ -256,7 +258,7 @@ export class PinAllocator {
           toPin: 'AO',
           color: '#06b6d4', // Cyan
         });
-        pinHeaderLines.push(`#define ${compId.toUpperCase()}_PIN ${analogPin}`);
+        registry.assign(compId, 'AO', analogPin, 'analog', `${compId.toUpperCase()}_PIN`);
       } else if (profile.id === 'wokwi-potentiometer') {
         const analogPin = this.allocateAnalogPin();
         wiresToAdd.push({
@@ -266,7 +268,7 @@ export class PinAllocator {
           toPin: 'SIG',
           color: '#06b6d4', // Cyan
         });
-        pinHeaderLines.push(`#define ${compId.toUpperCase()}_PIN ${analogPin}`);
+        registry.assign(compId, 'SIG', analogPin, 'analog', `${compId.toUpperCase()}_PIN`);
       } else if (profile.id === 'wokwi-ssd1306') {
         const { sda, scl } = this.getI2CPins();
         wiresToAdd.push({
@@ -283,7 +285,8 @@ export class PinAllocator {
           toPin: 'SCL',
           color: '#f59e0b',
         });
-        pinHeaderLines.push(`// ${compId.toUpperCase()} I2C on SDA: ${sda}, SCL: ${scl}`);
+        registry.assign(compId, 'SDA', sda, 'i2c', `${compId.toUpperCase()}_SDA_PIN`);
+        registry.assign(compId, 'SCL', scl, 'i2c', `${compId.toUpperCase()}_SCL_PIN`);
       } else if (profile.id === 'wokwi-lcd1602') {
         // Standard 4-bit Parallel Mode
         const rsPin = this.allocateDigitalPin('12');
@@ -307,7 +310,12 @@ export class PinAllocator {
         // Connect Backlight Anode A to 5V
         wiresToAdd.push({ fromPart: 'board', fromPin: boardVcc, toPart: compId, toPin: 'A', color: '#ef4444' });
 
-        pinHeaderLines.push(`// LCD1602 Pins: RS=${rsPin}, E=${ePin}, D4=${d4Pin}, D5=${d5Pin}, D6=${d6Pin}, D7=${d7Pin}`);
+        registry.assign(compId, 'RS', rsPin, 'digital', `${compId.toUpperCase()}_RS_PIN`);
+        registry.assign(compId, 'E', ePin, 'digital', `${compId.toUpperCase()}_E_PIN`);
+        registry.assign(compId, 'D4', d4Pin, 'digital', `${compId.toUpperCase()}_D4_PIN`);
+        registry.assign(compId, 'D5', d5Pin, 'digital', `${compId.toUpperCase()}_D5_PIN`);
+        registry.assign(compId, 'D6', d6Pin, 'digital', `${compId.toUpperCase()}_D6_PIN`);
+        registry.assign(compId, 'D7', d7Pin, 'digital', `${compId.toUpperCase()}_D7_PIN`);
       }
     }
 
@@ -315,7 +323,7 @@ export class PinAllocator {
       boardKind: this.boardProfile.kind,
       componentsToAdd,
       wiresToAdd,
-      pinDefinitionsHeader: pinHeaderLines.join('\n'),
+      pinDefinitionsHeader: registry.generateHeaderBlock(),
     };
   }
 }
