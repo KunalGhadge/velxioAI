@@ -201,3 +201,266 @@ VelxioAI-Platform
     │   └── main.py (FastAPI application entry point)
     └── requirements.txt (Python dependencies: FastAPI, Uvicorn, SQLAlchemy)
 ```
+
+---
+
+## Question 2: Component System
+
+**How are components stored?**
+
+**Are they stored as:**
+- JSON
+- Classes
+- TypeScript interfaces
+- Database records
+
+*Show an example component object.*
+
+*Show how wires and pin connections are represented.*
+
+---
+
+## Answer 2
+
+### 1. Multi-Layered Component Storage Model
+
+In Velxio, components exist across **all 4 tiers**, each fulfilling a specific role in the system lifecycle:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                 4-TIER COMPONENT REPRESENTATION                                 │
+├────────────────────────────────┬────────────────────────────────┬───────────────────────────────┤
+│ Tier                           │ Implementation Format          │ Primary Responsibility        │
+├────────────────────────────────┼────────────────────────────────┼───────────────────────────────┤
+│ 1. In-Memory Workspace State   │ TypeScript Interfaces          │ High-speed reactivity, undo/  │
+│                                │ (Zustand: `useSimulatorStore`) │ redo stack & canvas rendering │
+├────────────────────────────────┼────────────────────────────────┼───────────────────────────────┤
+│ 2. Visual & Physical Layer     │ Custom Web Component Classes   │ DOM rendering, SVG graphics,  │
+│                                │ (LitElement / `HTMLElement`)   │ dynamic pin coordinates       │
+├────────────────────────────────┼────────────────────────────────┼───────────────────────────────┤
+│ 3. File & Transfer Format      │ JSON Documents                 │ Serialization, Wokwi diagram  │
+│                                │ (`diagram.json` / metadata)    │ format & AI code generation   │
+├────────────────────────────────┼────────────────────────────────┼───────────────────────────────┤
+│ 4. Backend Persistence Layer   │ Database Records               │ Multi-tenant user storage,    │
+│                                │ (SQLAlchemy / PostgreSQL/SQLite│ project saves & revisions     │
+└────────────────────────────────┴────────────────────────────────┴───────────────────────────────┘
+```
+
+---
+
+### 2. Detailed Storage Tier Breakdown
+
+#### A. In-Memory: TypeScript Interfaces
+In the active React/Zustand store (`useSimulatorStore.ts`), placed parts and wires are strictly typed objects:
+
+```typescript
+// Component in active simulation canvas (useSimulatorStore.ts)
+export interface Component {
+  id: string;                      // Unique canvas instance ID (e.g. "led_1718029381_0")
+  metadataId: string;              // Canonical registry type (e.g. "led", "dht22", "lcd1602")
+  x: number;                       // Canvas X coordinate in pixels
+  y: number;                       // Canvas Y coordinate in pixels
+  properties: Record<string, any>; // Editable part properties (e.g. { color: "red", value: "220" })
+}
+
+// Canonical Catalog Definition (ComponentRegistry.ts)
+export interface ComponentMetadata {
+  id: string;                      // e.g. "wokwi-led"
+  name: string;                    // "LED"
+  category: 'sensors' | 'displays' | 'outputs' | 'inputs' | 'passives' | 'ics';
+  description: string;
+  pins: PinDefinition[];           // Array of pin names, labels, and default positions
+  defaultProperties: Record<string, any>;
+  componentClass?: string;         // Web Component custom element tag name
+}
+```
+
+#### B. Visual & Terminal Layer: Web Component Classes
+All interactive hardware parts inherit from custom Web Component classes (`HTMLElement` / `LitElement`). They expose a critical **`pinInfo` getter** that calculates exact millimeter-accurate pin coordinates in DOM space for wiring:
+
+```typescript
+// Web Component implementation (@wokwi/elements / custom elements)
+export class WokwiLED extends HTMLElement {
+  static get observedAttributes() {
+    return ['color', 'value', 'label', 'flip'];
+  }
+
+  // Dynamic pin coordinate getter called by wire layout calculators
+  get pinInfo(): PinInfo[] {
+    return [
+      { name: 'A', label: 'Anode', x: 7.6, y: 34.0, signals: ['ANODE'] },
+      { name: 'C', label: 'Cathode', x: 2.5, y: 34.0, signals: ['GND'] }
+    ];
+  }
+}
+customElements.define('wokwi-led', WokwiLED);
+```
+
+#### C. File & Network Layer: JSON Format
+When exported, shared, or passed to/from the AI agent, circuits use standard Wokwi-compatible JSON (`diagram.json`):
+
+```json
+{
+  "version": 1,
+  "author": "Velxio User",
+  "editor": "velxio",
+  "parts": [
+    {
+      "type": "board-arduino-uno",
+      "id": "uno",
+      "top": 100,
+      "left": 60,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-led",
+      "id": "led1",
+      "top": 120,
+      "left": 380,
+      "attrs": { "color": "green" }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "r1",
+      "top": 200,
+      "left": 380,
+      "attrs": { "value": "220" }
+    }
+  ],
+  "connections": [
+    [ "uno:13", "r1:1", "green", [ "v0" ] ],
+    [ "r1:2", "led1:A", "green", [ "v0" ] ],
+    [ "led1:C", "uno:GND.1", "black", [ "v0" ] ]
+  ]
+}
+```
+
+#### D. Database Layer: Relational Records
+In the backend database (SQLAlchemy models in `backend/app/models/project.py`), projects store the complete JSON document alongside relational metadata:
+
+```python
+class Project(Base):
+    __tablename__ = "projects"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    title = Column(String(255), nullable=False)
+    board_type = Column(String(50), default="arduino-uno")
+    
+    # Serialized Circuit Netlist (JSON diagram format)
+    diagram = Column(Text, nullable=False, default="{}")
+    
+    # Source Code Files
+    source_code = Column(Text, nullable=False, default="")
+    files_manifest = Column(JSON, nullable=False, default=dict)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+```
+
+---
+
+### 3. Example Component Objects in Memory
+
+#### Example 1: Placed LED Component Object
+```json
+{
+  "id": "led_1771129381_0",
+  "metadataId": "led",
+  "x": 380,
+  "y": 120,
+  "properties": {
+    "color": "green",
+    "brightness": "1.0",
+    "label": "Status LED"
+  }
+}
+```
+
+#### Example 2: Placed DHT22 Temperature & Humidity Sensor Object
+```json
+{
+  "id": "dht22_1771129381_1",
+  "metadataId": "dht22",
+  "x": 570,
+  "y": 120,
+  "properties": {
+    "temperature": 24.5,
+    "humidity": 60.0
+  }
+}
+```
+
+---
+
+### 4. Representation of Wires & Pin Connections
+
+Wires are modeled as **directed graph edges between pin endpoints** with electrical metadata:
+
+#### A. TypeScript Wire Interface (`useSimulatorStore.ts`)
+```typescript
+export interface WireEndpoint {
+  componentId: string; // Target board ID ("uno") or component ID ("led1")
+  pinName: string;     // Exact pin label ("13", "A0", "5V", "GND.1", "VCC", "SDA")
+  x: number;           // Calculated canvas X coordinate of the terminal
+  y: number;           // Calculated canvas Y coordinate of the terminal
+}
+
+export interface Wire {
+  id: string;                  // Unique wire ID (e.g. "wire_1771129381_abc")
+  start: WireEndpoint;         // Source pin endpoint
+  end: WireEndpoint;           // Destination pin endpoint
+  waypoints: { x: number; y: number }[]; // Orthogonal routing elbow points
+  color: string;               // Electrical standard color (e.g. "#ef4444", "#1f2937")
+}
+```
+
+#### B. Example Wire Objects
+```json
+[
+  {
+    "id": "wire_vcc_dht22",
+    "start": {
+      "componentId": "uno",
+      "pinName": "5V",
+      "x": 124,
+      "y": 322
+    },
+    "end": {
+      "componentId": "dht22_1771129381_1",
+      "pinName": "VCC",
+      "x": 578,
+      "y": 145
+    },
+    "waypoints": [
+      { "x": 124, "y": 360 },
+      { "x": 578, "y": 360 }
+    ],
+    "color": "#ef4444"
+  },
+  {
+    "id": "wire_data_dht22",
+    "start": {
+      "componentId": "uno",
+      "pinName": "2",
+      "x": 218,
+      "y": 112
+    },
+    "end": {
+      "componentId": "dht22_1771129381_1",
+      "pinName": "SDA",
+      "x": 590,
+      "y": 145
+    },
+    "waypoints": [],
+    "color": "#10b981"
+  }
+]
+```
+
+#### C. SPICE Netlist Wire Resolution (`NetlistBuilder.ts`)
+During simulation, wire graphs are compiled into continuous electrical nodes using a **Union-Find Disjoint Set**:
+1. All connected endpoints with pins named `GND`, `VSS`, or `0` are unioned into canonical SPICE Node **`0`** (Ground).
+2. All connected endpoints with pins named `5V`, `3V3`, `VCC`, or `VDD` are unioned into canonical SPICE Node **`vcc_rail`**.
+3. All other interconnected pins form isolated nodal voltage nets (`n1`, `n2`, `n3`, ...), which are fed to the **WASM ngspice solver** to evaluate voltages and currents in real time.
+
