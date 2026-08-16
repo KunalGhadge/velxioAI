@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { AIEventBus, AIEvent } from '../../ai/events/AIEventBus';
+import { AIEventBus, type AIEvent } from '../../ai/events/AIEventBus';
 import './AIProgressTracker.css';
 
 export interface ProgressStage {
