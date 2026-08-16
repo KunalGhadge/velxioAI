@@ -38,10 +38,12 @@ interface ComponentLike {
   properties?: Record<string, unknown>;
 }
 
-export function isBurnoutResistor(metadataId: string): boolean {
+export function isBurnoutResistor(metadataId: string | undefined): boolean {
+  if (!metadataId || typeof metadataId !== 'string') return false;
   return metadataId === 'resistor' || metadataId === 'resistor-us' || metadataId.startsWith('resistor-');
 }
-export function isBurnoutElectrolyticCap(metadataId: string): boolean {
+export function isBurnoutElectrolyticCap(metadataId: string | undefined): boolean {
+  if (!metadataId || typeof metadataId !== 'string') return false;
   return metadataId === 'capacitor-electrolytic' || metadataId.startsWith('cap-elec');
 }
 

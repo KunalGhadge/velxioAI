@@ -70,7 +70,8 @@ const VCC_PIN_RE = /^(vcc|vdd|vcc_rail|5v|3v3|3\.3v)$/i;
 
 /** metadataId prefixes of components that must NOT be auto-canonicalized
  *  by the pin-name regex (their pins are just probe labels). */
-function skipCanonicalization(metadataId: string): boolean {
+function skipCanonicalization(metadataId: string | undefined): boolean {
+  if (!metadataId || typeof metadataId !== 'string') return false;
   return metadataId.startsWith('instr-');
 }
 

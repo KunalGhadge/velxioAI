@@ -1306,8 +1306,9 @@ export const SimulatorCanvas = ({ headerSlot }: SimulatorCanvasProps = {}) => {
     };
 
     components.forEach((component) => {
+      if (!component) return;
       // 1. Subscribe by explicit pin property (old-style, no wire needed)
-      if (component.properties.pin !== undefined) {
+      if (component.properties && component.properties.pin !== undefined) {
         subscribeComponentToPin(component, component.properties.pin as number, 'A', false);
       } else {
         // 2. Subscribe by finding wires connected to arduino
@@ -2537,9 +2538,9 @@ export const SimulatorCanvas = ({ headerSlot }: SimulatorCanvasProps = {}) => {
       );
     }
 
-    const metadata = registry.getById(component.metadataId);
+    const rawMetaId = component?.metadataId || (component as any)?.type || '';
+    const metadata = rawMetaId ? registry.getById(rawMetaId) : null;
     if (!metadata) {
-      console.warn(`Metadata not found for component: ${component.metadataId}`);
       return null;
     }
 

@@ -8,6 +8,7 @@
 import { useEditorStore } from '../store/useEditorStore';
 import { useSimulatorStore } from '../store/useSimulatorStore';
 import { useCompileLogsStore } from '../store/useCompileLogsStore';
+import { ComponentRegistry } from '../services/ComponentRegistry';
 import { runEditorCommand, hasEditorCommand } from '../lib/editorCommands';
 import { CircuitLayoutEngine } from './CircuitLayoutEngine';
 import type { BoardKind } from '../types/board';
@@ -170,6 +171,7 @@ export class AgentToolEngine {
   public static applyCircuit(proposal: CircuitProposal): ToolExecutionResult {
     try {
       const sim = useSimulatorStore.getState();
+      const registry = ComponentRegistry.getInstance();
 
       // 1. Ensure board matches proposal
       if (proposal.boardKind) {
@@ -180,6 +182,7 @@ export class AgentToolEngine {
 
       // 2. Position board at standard origin
       const currentBoard = sim.boards[0];
+      const boardId = currentBoard?.id || 'arduino-uno';
       if (currentBoard) {
         sim.setBoardPosition(CircuitLayoutEngine.BOARD_ORIGIN, currentBoard.id);
       }
@@ -188,7 +191,7 @@ export class AgentToolEngine {
       if (proposal.componentsToRemove && proposal.componentsToRemove.length > 0) {
         proposal.componentsToRemove.forEach((cid) => {
           try {
-            sim.removeComponent(cid);
+            sim.recordRemoveComponent(cid);
           } catch {}
         });
       }
@@ -200,50 +203,61 @@ export class AgentToolEngine {
         existingCount
       );
 
-      laidOutComponents.forEach((comp) => {
+      const partIdMap: Record<string, string> = {
+        board: boardId,
+        arduino: boardId,
+        uno: boardId,
+        'arduino-uno': boardId,
+        mcu: boardId,
+      };
+
+      laidOutComponents.forEach((comp, idx) => {
         try {
-          const typeName = comp.type.replace(/^wokwi-/, '');
-          sim.addComponent(
-            typeName,
-            comp.left,
-            comp.top,
-            comp.rotate || 0,
-            comp.attrs || {},
-            comp.id
-          );
+          const rawType = (comp.type || 'led').replace(/^(wokwi|velxio)-/, '').toLowerCase();
+          const meta = registry.getById(rawType) || registry.getById('led');
+          const canonicalMetadataId = meta ? meta.id : rawType;
+          const safeId = comp.id || `${canonicalMetadataId.replace(/-/g, '_')}_${Date.now()}_${idx}`;
+
+          partIdMap[comp.id || ''] = safeId;
+          partIdMap[rawType] = safeId;
+          if (comp.type) partIdMap[comp.type] = safeId;
+
+          sim.recordAddComponent({
+            id: safeId,
+            metadataId: canonicalMetadataId,
+            x: comp.left || (380 + (idx % 3) * 190),
+            y: comp.top || (80 + Math.floor(idx / 3) * 150),
+            properties: { ...(comp.attrs || (comp as any).properties || {}) },
+          });
         } catch (e) {
           console.warn(`[AgentToolEngine] Failed to add component ${comp.id}:`, e);
         }
       });
 
       // 5. Connect wires with standardized colors
-      const boardId = currentBoard?.id || 'arduino-uno';
       const normalizedWires = CircuitLayoutEngine.normalizeWires(proposal.wiresToAdd || []);
 
+      normalizedWires.forEach((wire) => {
+        try {
+          const fromId = partIdMap[wire.fromPart] || wire.fromPart;
+          const toId = partIdMap[wire.toPart] || wire.toPart;
+
+          sim.recordAddWire({
+            id: `wire_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+            start: { componentId: fromId, pinName: wire.fromPin, x: 0, y: 0 },
+            end: { componentId: toId, pinName: wire.toPin, x: 0, y: 0 },
+            waypoints: [],
+            color: wire.color || '#2563eb',
+          });
+        } catch (e) {
+          console.warn(`[AgentToolEngine] Failed to add wire:`, e);
+        }
+      });
+
+      // Recalculate wire geometry after DOM settles
       setTimeout(() => {
-        normalizedWires.forEach((wire) => {
-          try {
-            const fromId =
-              wire.fromPart === 'board' || wire.fromPart === 'uno' || wire.fromPart === 'mcu'
-                ? boardId
-                : wire.fromPart;
-            const toId =
-              wire.toPart === 'board' || wire.toPart === 'uno' || wire.toPart === 'mcu'
-                ? boardId
-                : wire.toPart;
-
-            sim.startWireCreation({ componentId: fromId, pinName: wire.fromPin, x: 0, y: 0 }, wire.color);
-            sim.finishWireCreation({ componentId: toId, pinName: wire.toPin, x: 0, y: 0 });
-          } catch (e) {
-            console.warn(`[AgentToolEngine] Failed to connect wire ${wire.fromPin} -> ${wire.toPin}:`, e);
-          }
-        });
-
-        // Recalculate wire geometry
-        setTimeout(() => {
-          sim.recalculateAllWirePositions();
-        }, 150);
-      }, 100);
+        sim.recalculateAllWirePositions?.();
+      }, 150);
 
       return {
         success: true,
