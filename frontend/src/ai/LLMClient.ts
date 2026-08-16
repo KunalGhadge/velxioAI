@@ -158,8 +158,8 @@ export class LLMClient {
     callbacks: StreamCallbacks,
     abortSignal?: AbortSignal
   ): Promise<void> {
-    const provider = settings.provider;
-    const keyPool = this.parseKeyPool(settings.apiKeys[provider]);
+    const provider = settings?.provider || 'gemini';
+    const keyPool = this.parseKeyPool(settings?.apiKeys?.[provider]);
 
     if (provider !== 'ollama' && keyPool.length === 0) {
       callbacks.onError(

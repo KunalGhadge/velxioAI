@@ -225,7 +225,7 @@ export const useAIStore = create<AIStoreState>()(
         set((state) => ({
           settings: {
             ...state.settings,
-            apiKeys: { ...state.settings.apiKeys, [provider]: key.trim() },
+            apiKeys: { ...(state.settings?.apiKeys || {}), [provider]: key.trim() },
           },
         }));
       },
@@ -289,11 +289,15 @@ export const useAIStore = create<AIStoreState>()(
           let fullText = '';
           let reasoningText = '';
 
+          const chatHistory = [...state.messages, userMsg].map((m) => ({
+            role: (m.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant' | 'system',
+            content: m.content,
+          }));
+
           await LLMClient.streamMessage(
-            state.settings,
             systemPrompt,
-            state.messages,
-            userMsg.content,
+            chatHistory,
+            state.settings,
             {
               onToken: (token) => {
                 fullText += token;
