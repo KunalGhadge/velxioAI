@@ -333,9 +333,17 @@ export class LLMClient {
       },
     };
 
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'x-goog-api-key': apiKey,
+    };
+    if (apiKey.startsWith('AQ') || apiKey.includes('.')) {
+      headers['Authorization'] = `Bearer ${apiKey}`;
+    }
+
     const res = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(payload),
       signal: abortSignal,
     });
@@ -648,16 +656,16 @@ export class LLMClient {
 
     try {
       if (provider === 'gemini') {
-        if (!keyToTest.startsWith('AIzaSy')) {
-          return {
-            success: false,
-            message: `⚠️ The key starts with "${keyToTest.slice(0, 3)}...", which looks like a Google Cloud OAuth / service token. Google Gemini requires a Google AI Studio API key (starts with "AIzaSy..."). Get your free key at: https://aistudio.google.com/app/apikey`,
-          };
+        const testModel = model || 'gemini-2.0-flash';
+        const headers: Record<string, string> = {
+          'x-goog-api-key': keyToTest,
+        };
+        if (keyToTest.startsWith('AQ') || keyToTest.includes('.')) {
+          headers['Authorization'] = `Bearer ${keyToTest}`;
         }
 
-        const testModel = model || 'gemini-2.0-flash';
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${testModel}?key=${keyToTest}`;
-        const res = await fetch(url);
+        const res = await fetch(url, { headers });
         if (res.ok) {
           return {
             success: true,
@@ -665,7 +673,7 @@ export class LLMClient {
           };
         } else {
           // Try 1.5 flash fallback test
-          const fallbackRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash?key=${keyToTest}`);
+          const fallbackRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash?key=${keyToTest}`, { headers });
           if (fallbackRes.ok) {
             return {
               success: true,
