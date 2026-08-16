@@ -376,7 +376,10 @@ export class CircuitValidator {
             if (profile.id === 'wokwi-lcd1602' && ['D0', 'D1', 'D2', 'D3'].includes(pinNameUpper)) {
               continue;
             }
-            // For RGB LED pins, they are handled
+            // For NeoPixel DOUT cascade pin (optional)
+            if (profile.id === 'wokwi-neopixel' && pinNameUpper === 'DOUT') {
+              continue;
+            }
             if (!connectedPins.has(pinNameUpper)) {
               const msg = `UNCONNECTED DIGITAL PIN: Required digital/bus signal pin "${pin.name}" on component "${compId}" (${profile.name}) is floating and unconnected.`;
               errors.push(msg);

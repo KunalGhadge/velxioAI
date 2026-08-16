@@ -14,6 +14,8 @@ import { CircuitLayoutEngine } from './CircuitLayoutEngine';
 import { CircuitValidator } from './tools/CircuitValidator';
 import { PinAllocator } from './hardware/PinAllocator';
 import { PinAssignmentRegistry } from './hardware/PinAssignmentRegistry';
+import { LibraryDependencyManager } from './firmware/LibraryDependencyManager';
+import { ProjectArchitectureEngine } from './architecture/ProjectArchitectureEngine';
 import type { BoardKind } from '../types/board';
 import type { CircuitProposal, CodeProposal } from './types';
 
@@ -37,6 +39,12 @@ export class AgentToolEngine {
         if (pinReg.getAllAssignments().length > 0) {
           finalContent = pinReg.synchronizeFirmwareCode(content);
         }
+
+        // Auto-detect and inject missing library headers
+        const sim = useSimulatorStore.getState();
+        const componentTypes = sim.components.map((c) => c.metadataId);
+        const { headersToInclude } = LibraryDependencyManager.resolveLibraries(componentTypes, finalContent);
+        finalContent = LibraryDependencyManager.injectHeaders(finalContent, headersToInclude);
       }
 
       const editor = useEditorStore.getState();
