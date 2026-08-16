@@ -44,6 +44,7 @@ interface AIStoreState {
 
   // Actions
   setDockOpen: (open: boolean) => void;
+  toggleDock: (open?: boolean) => void;
   setDockWidth: (width: number) => void;
   updateSettings: (partial: Partial<AISettings>) => void;
   setApiKey: (provider: any, key: string) => void;
@@ -144,6 +145,7 @@ export const useAIStore = create<AIStoreState>()(
       checkpointSnapshot: null,
 
       setDockOpen: (open) => set({ dockOpen: open }),
+      toggleDock: (open?: boolean) => set((s) => ({ dockOpen: open !== undefined ? open : !s.dockOpen })),
       setDockWidth: (width) => set({ dockWidth: Math.max(320, Math.min(800, width)) }),
 
       updateSettings: (partial) => {
