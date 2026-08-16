@@ -6,15 +6,15 @@
  * deterministic hardware engine, eliminating LLM hallucinations and desynchronization.
  */
 
-import { RequirementExtractor, UserRequirements } from '../requirements/RequirementExtractor';
+import { RequirementExtractor, type UserRequirements } from '../requirements/RequirementExtractor';
 import { ComponentConstraintValidator } from '../requirements/ComponentConstraintValidator';
-import { SubsystemPlanner, PlannedSubsystem } from '../architecture/SubsystemPlanner';
+import { SubsystemPlanner, type PlannedSubsystem } from '../architecture/SubsystemPlanner';
 import { BoardRecommendationEngine } from '../architecture/BoardRecommendationEngine';
-import { PinAllocator, HardwarePinAssignment } from '../hardware/PinAllocator';
+import { PinAllocator, type HardwarePinAssignment } from '../hardware/PinAllocator';
 import { PinAssignmentRegistry } from '../hardware/PinAssignmentRegistry';
 import { LibraryResolver } from '../compiler/LibraryResolver';
 import { CircuitValidator } from '../tools/CircuitValidator';
-import { CircuitProposal, CodeProposal } from '../types';
+import type { CircuitProposal, CodeProposal } from '../types';
 
 export interface ProjectSpecification {
   id: string;

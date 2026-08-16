@@ -6,7 +6,7 @@
  * header injections, pin definitions), and recompiles until success or exhaustion.
  */
 
-import { CompilationErrorClassifier, CompilationFailure } from './CompilationErrorClassifier';
+import { CompilationErrorClassifier, type CompilationFailure } from './CompilationErrorClassifier';
 import { RepairPlanner } from './RepairPlanner';
 import { AgentToolEngine } from '../AgentToolEngine';
 import { useEditorStore } from '../../store/useEditorStore';

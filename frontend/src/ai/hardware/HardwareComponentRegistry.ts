@@ -6,6 +6,7 @@
  */
 
 import { ComponentRegistry } from '../../services/ComponentRegistry';
+import { ComponentAliasRegistry } from './ComponentAliasRegistry';
 
 export type ComponentCategory =
   | 'sensors'
@@ -332,8 +333,6 @@ export const HARDWARE_COMPONENT_PROFILES: Record<string, HardwareComponentProfil
     powerPins: { vcc: 'VDD', gnd: 'GND' },
   },
 };
-
-import { ComponentAliasRegistry } from './ComponentAliasRegistry';
 
 export class HardwareComponentRegistry {
   public static getComponent(type: string): HardwareComponentProfile | null {

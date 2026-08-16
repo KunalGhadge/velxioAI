@@ -6,7 +6,7 @@
  * forbidden components are hallucinated or inserted.
  */
 
-import { UserRequirements, RequirementExtractor } from './RequirementExtractor';
+import { RequirementExtractor, type UserRequirements } from './RequirementExtractor';
 import { HardwareComponentRegistry } from '../hardware/HardwareComponentRegistry';
 
 export interface ConstraintValidationResult {

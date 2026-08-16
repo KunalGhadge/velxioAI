@@ -8,7 +8,7 @@
  * - Fixes constructor and API signatures
  */
 
-import { CompilationFailure, CompilationErrorType } from './CompilationErrorClassifier';
+import { type CompilationFailure, CompilationErrorType } from './CompilationErrorClassifier';
 import { PinAssignmentRegistry } from '../hardware/PinAssignmentRegistry';
 import { LibraryResolver } from './LibraryResolver';
 
