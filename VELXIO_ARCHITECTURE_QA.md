@@ -667,4 +667,135 @@ Prompts are dynamically built on every user turn by [`AIContextCollector.ts`](fi
 └─────────────────────────────────┘
 ```
 
+---
+
+## Question 4: File System Structure
+
+**Show the project's file structure.**
+
+**Include:**
+- src
+- components
+- simulator
+- compiler
+- ai
+- circuits
+- serial monitor
+
+*Limit the output to 4 directory levels.*
+
+---
+
+## Answer 4
+
+### 1. Project Directory Tree (Max 4 Directory Levels)
+
+```
+VelxioAI/
+├── frontend/                                   # Single Page Application (React 18 + TS + Vite)
+│   ├── public/                                 # Static Assets & Catalog Metadata
+│   │   ├── boards/                             # Board vector SVGs (Uno, Nano, Mega, ESP32, Pico, Pi3)
+│   │   ├── component-svgs/                     # Auto-generated component vector icons
+│   │   ├── ngspice/                            # WASM ngspice solver binaries & workers
+│   │   └── components-metadata.json            # 165+ Canonical component schemas
+│   └── src/                                    # Frontend Application Source (Level 1)
+│       ├── ai/                                 # Autonomous Studio Agent & Co-Pilot (Level 2)
+│       │   ├── tools/                          # AI Tool implementations (watchdog, refactor)
+│       │   ├── AgentToolEngine.ts              # Unified programmatic execution tool layer
+│       │   ├── AIContextCollector.ts           # Real-time workspace context gatherer & prompt builder
+│       │   ├── CircuitLayoutEngine.ts          # Collision-free auto-placement & wire coloring
+│       │   ├── CircuitSynthesizer.ts           # Hardware netlist synthesis engine
+│       │   ├── LLMClient.ts                    # Provider-agnostic client (Gemini, Claude, GPT, Ollama)
+│       │   ├── types.ts                        # Agent action schemas & proposal types
+│       │   └── useAIStore.ts                   # Zustand AI message & execution store
+│       ├── components/                         # UI Components & Custom Elements (Level 2)
+│       │   ├── ai/                             # AI Assistant Dock & UI Widgets (Level 3)
+│       │   │   ├── AIAssistantDock.tsx         # Collapsible right-dock AI chat & tool container
+│       │   │   ├── AIChatMessage.tsx           # Rich Markdown & interactive action message renderer
+│       │   │   ├── AICircuitProposalCard.tsx   # Visual circuit diff proposal card
+│       │   │   ├── AICodeDiffCard.tsx          # Inline Monaco code diff proposal card
+│       │   │   ├── AIReasoningAccordion.tsx    # Collapsible ReAct reasoning traces
+│       │   │   └── AISettingsModal.tsx         # Multi-provider API key & model configuration
+│       │   ├── editor/                         # Monaco Editor & Console (Level 3)
+│       │   │   ├── CompilationConsole.tsx      # Compiler diagnostics, errors, & auto-heal trigger
+│       │   │   ├── EditorToolbar.tsx           # Compile, run, stop, beautify, and zoom controls
+│       │   │   ├── MonacoEditor.tsx            # Multi-file Monaco code editor wrapper
+│       │   │   └── NewProjectDialog.tsx        # Template & blank project launcher
+│       │   ├── serial/                         # Serial Monitor Subsystem (Level 3)
+│       │   │   ├── SerialMonitor.tsx           # Live UART console, ANSI escape parser, plotter
+│       │   │   ├── SerialPlotter.tsx           # Real-time multi-variable waveform oscilloscope
+│       │   │   └── WebSerialBridge.ts          # Physical USB Web Serial API hardware bridge
+│       │   ├── simulator/                      # Circuit Canvas & Part Viewers (Level 3)
+│       │   │   ├── SimulatorCanvas.tsx         # Interactive hardware breadboard & canvas renderer
+│       │   │   ├── PartInspectorDialog.tsx     # Component attribute & pin inspector modal
+│       │   │   ├── PropertyEditDialog.tsx      # Part electrical parameters editor (ohms, color)
+│       │   │   └── WireOverlay.tsx             # SVG wire curves & terminal endpoint renderer
+│       │   └── ComponentRegistry.ts            # Component metadata registry singleton
+│       ├── services/                           # IDE Infrastructure & Sim Services (Level 2)
+│       │   ├── CircuitSimulationService.ts     # Master coordinator between SPICE & digital engines
+│       │   ├── PinManager.ts                   # Real-time pin logic states & interrupt routing
+│       │   └── I2CBusManager.ts                # Master/Slave I2C bus transaction forwarder
+│       ├── simulation/                         # Hardware & Electrical Solvers (Level 2)
+│       │   ├── mcu/                            # Microcontroller Emulators (Level 3)
+│       │   │   ├── AVRSimulator.ts             # 8-bit AVR emulator (avr8js engine)
+│       │   │   ├── RP2040Simulator.ts          # 32-bit ARM Cortex-M0+ emulator (rp2040js engine)
+│       │   │   └── Esp32Bridge.ts              # WebSocket bridge to backend QEMU Xtensa/RISC-V
+│       │   ├── parts/                          # Peripheral Component Simulators (Level 3)
+│       │   │   ├── DHT22Sensor.ts              # Temperature & humidity sensor simulation
+│       │   │   ├── LCD1602Display.ts           # HD44780 16x2 / 20x4 LCD character display
+│       │   │   ├── SSD1306OLED.ts              # 128x64 I2C OLED display frame buffer
+│       │   │   ├── ServoMotor.ts               # PWM pulse-width angle controller
+│       │   │   └── runtimeBurnout.ts           # Electrical overcurrent/overvoltage stress checker
+│       │   └── spice/                          # Analog Circuit Solver (Level 3)
+│       │       ├── NetlistBuilder.ts           # Union-Find netlist extractor & SPICE card generator
+│       │       ├── NgSpiceWorkerAdapter.ts     # Web Worker bridge to WASM ngspice engine
+│       │       └── MixedModeScheduler.ts       # Synchronizer between digital ticks & analog solves
+│       ├── store/                              # Global Zustand State Architecture (Level 2)
+│       │   ├── useEditorStore.ts               # Multi-file virtual workspace filesystem
+│       │   ├── useSimulatorStore.ts            # Board state, canvas parts, wires, & execution status
+│       │   ├── useElectricalStore.ts           # SPICE nodal voltages & burnout fault logs
+│       │   ├── useCompileLogsStore.ts          # Compiler diagnostic stdout/stderr streams
+│       │   ├── useOscilloscopeStore.ts         # Multi-channel logic analyzer waveform buffers
+│       │   └── useAuthStore.ts                 # User authentication & cloud profile state
+│       ├── types/                              # Core TypeScript Interface Definitions (Level 2)
+│       │   ├── board.ts                        # MCU Board types, FQBNs, & pinout schemas
+│       │   ├── components.ts                   # Component instances & catalog definitions
+│       │   ├── wires.ts                        # Wire endpoints & color definitions
+│       │   └── editor.ts                       # Virtual files & workspace structures
+│       ├── utils/                              # Geometry & Coordinate Utilities (Level 2)
+│       │   ├── pinPositionCalculator.ts        # Dynamic DOM pin terminal coordinate resolver
+│       │   └── workspaceDraft.ts               # LocalStorage draft stash & recovery
+│       ├── velxio-elements/                    # Native Web Component implementations (Level 2)
+│       ├── App.tsx                             # Root React Router & Layout shell
+│       ├── index.css                           # Global design system & theme variables
+│       └── main.tsx                            # React 18 DOM mount entry point
+│
+├── backend/                                    # Python FastAPI Microservices (Level 1)
+│   ├── app/                                    # Application Core (Level 2)
+│   │   ├── api/                                # REST API Gateways (Level 3)
+│   │   │   ├── compile.py                      # Stateless compiler orchestration endpoint
+│   │   │   ├── projects.py                     # Project CRUD & sharing endpoints
+│   │   │   └── auth.py                         # User authentication & JWT session management
+│   │   ├── core/                               # Backend Infrastructure (Level 3)
+│   │   │   ├── config.py                       # Environment variables & runtime settings
+│   │   │   └── database.py                     # SQLAlchemy session lifecycle management
+│   │   ├── models/                             # Relational DB Schemas (Level 3)
+│   │   │   ├── user.py                         # User table schema
+│   │   │   └── project.py                      # Project netlist, source code & manifest schema
+│   │   ├── services/                           # Compilers & Emulation Bridges (Level 3)
+│   │   │   ├── arduino_cli.py                  # arduino-cli invocation, library discovery & linting
+│   │   │   ├── espidf_compiler.py              # ESP-IDF CMake/Ninja native compiler toolchain
+│   │   │   └── qemu_bridge.py                  # WebSocket bridge to libqemu-xtensa / RISC-V
+│   │   └── main.py                             # FastAPI application factory & CORS configuration
+│   ├── tests/                                  # Backend PyTest integration test suite
+│   ├── venv/                                   # Python virtual environment
+│   └── requirements.txt                        # Backend dependencies (FastAPI, Uvicorn, SQLAlchemy)
+│
+└── scripts/                                    # Build & Metadata Tooling (Level 1)
+    ├── generate-component-metadata.ts          # Scans Web Components & builds metadata catalog
+    ├── generate-component-svgs.cjs             # Pre-renders component vector icon previews
+    └── component-overrides.json                # Custom pin definitions & property overrides
+```
+
+
 
