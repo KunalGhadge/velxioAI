@@ -1,39 +1,37 @@
 /**
- * VelxioAI Studio — AI Agent Zustand Store
+ * VelxioAI Studio — Central AI Agent State & Execution Store (Zustand)
  *
- * Manages chat history, streaming state, BYOK settings, active circuit
- * proposals, code diffs, hardware learning cards, and 1-click workspace rollback.
+ * Coordinates real-time context collection, multi-model streaming,
+ * discrete tool execution (files, circuit synthesis, libraries,
+ * simulation runner, serial monitor), and instant 1-click rollback.
  */
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { LLMClient } from './LLMClient';
+import { AIContextCollector } from './AIContextCollector';
+import { AgentToolEngine } from './AgentToolEngine';
+import { useSimulatorStore } from '../store/useSimulatorStore';
+import { useEditorStore } from '../store/useEditorStore';
 import type {
   AIMessage,
   AISettings,
-  AIProviderId,
   CircuitProposal,
   CodeProposal,
   HardwareLearningCardData,
   HardwareBOMData,
   ActionStep,
 } from './types';
-import { AIContextCollector } from './AIContextCollector';
-import { LLMClient } from './LLMClient';
-import { useSimulatorStore } from '../store/useSimulatorStore';
-import { useEditorStore } from '../store/useEditorStore';
-import { CircuitSynthesizer } from './CircuitSynthesizer';
-import { ComponentRegistry } from '../services/ComponentRegistry';
 
-const DEFAULT_SETTINGS: AISettings = {
-  provider: 'gemini',
-  apiKeys: {},
-  selectedModel: 'gemini-2.0-flash',
-  temperature: 0.2,
-  autoHealEnabled: true,
-  explainMode: true,
-};
+interface WorkspaceSnapshot {
+  components: any[];
+  wires: any[];
+  files: any[];
+  activeBoard: string;
+}
 
-interface AIState {
+interface AIStoreState {
+  settings: AISettings;
   messages: AIMessage[];
   isStreaming: boolean;
   streamingContent: string;
@@ -41,186 +39,112 @@ interface AIState {
   streamingSteps: ActionStep[];
   dockOpen: boolean;
   dockWidth: number;
-  settingsModalOpen: boolean;
-  settings: AISettings;
-  checkpointSnapshot: any | null;
+  selectedTemplateId: string | null;
+  checkpointSnapshot: WorkspaceSnapshot | null;
 
   // Actions
-  toggleDock: (open?: boolean) => void;
+  setDockOpen: (open: boolean) => void;
   setDockWidth: (width: number) => void;
-  openSettingsModal: () => void;
-  closeSettingsModal: () => void;
   updateSettings: (partial: Partial<AISettings>) => void;
-  setApiKey: (provider: AIProviderId, key: string) => void;
+  setApiKey: (provider: any, key: string) => void;
+  sendMessage: (promptText: string) => Promise<void>;
   clearMessages: () => void;
-
-  // Send message & execute actions
-  sendMessage: (content: string) => Promise<void>;
   applyCircuitProposal: (proposal: CircuitProposal) => void;
   applyCodeProposal: (proposal: CodeProposal) => void;
   rollbackCheckpoint: () => void;
+  compileProject: () => Promise<void>;
+  startSimulation: () => void;
+  stopSimulation: () => void;
+  beautifyCircuit: () => void;
 }
+
+const DEFAULT_SETTINGS: AISettings = {
+  provider: 'gemini',
+  apiKeys: {},
+  selectedModel: 'gemini-2.5-flash',
+  temperature: 0.2,
+  autoHealEnabled: true,
+  explainMode: false,
+};
 
 /**
- * Fault-tolerant JSON parser for LLM action outputs.
- * Handles unescaped newlines, trailing commas, single quotes, unclosed brackets, etc.
+ * Extracts raw C++/Python firmware code from markdown blocks
  */
-function safeParseActionJson(rawStr: string): any {
-  if (!rawStr || !rawStr.trim()) return null;
-
-  let str = rawStr.trim();
-  str = str.replace(/^```(?:json|velxio-action)?\s*/i, '').replace(/\s*```$/i, '').trim();
-
-  // Attempt 1: Direct parse
-  try {
-    return JSON.parse(str);
-  } catch {}
-
-  // Attempt 2: Strip trailing commas
-  try {
-    const noTrailing = str.replace(/,(\s*[}\]])/g, '$1');
-    return JSON.parse(noTrailing);
-  } catch {}
-
-  // Attempt 3: Precise char-by-char string literal newline & tab escaping
-  try {
-    let inString = false;
-    let escaped = false;
-    let result = '';
-
-    for (let i = 0; i < str.length; i++) {
-      const char = str[i];
-      if (char === '"' && !escaped) {
-        inString = !inString;
-        result += char;
-      } else if (inString) {
-        if (char === '\n') {
-          result += '\\n';
-        } else if (char === '\r') {
-          // ignore CR
-        } else if (char === '\t') {
-          result += '\\t';
-        } else {
-          result += char;
-        }
-      } else {
-        result += char;
-      }
-      escaped = char === '\\' && !escaped;
-    }
-
-    result = result.replace(/,(\s*[}\]])/g, '$1');
-    return JSON.parse(result);
-  } catch {}
-
-  // Attempt 4: Auto-close brackets/braces
-  try {
-    let fixed = str.replace(/,(\s*[}\]])/g, '$1');
-    fixed = fixed.replace(/"((?:\\.|[^"\\])*)"/g, (_, p1) => {
-      return '"' + p1.replace(/\r?\n/g, '\\n').replace(/\t/g, '\\t') + '"';
-    });
-
-    let openBraces = (fixed.match(/{/g) || []).length;
-    let closeBraces = (fixed.match(/}/g) || []).length;
-    while (closeBraces < openBraces) {
-      fixed += '}';
-      closeBraces++;
-    }
-    let openBrackets = (fixed.match(/\[/g) || []).length;
-    let closeBrackets = (fixed.match(/\]/g) || []).length;
-    while (closeBrackets < openBrackets) {
-      fixed += ']';
-      closeBrackets++;
-    }
-
-    return JSON.parse(fixed);
-  } catch {}
-
-  // Attempt 5: Fallback regex extraction
-  const result: any = {};
-  try {
-    const codeMatch = str.match(/"proposedContent"\s*:\s*"([\s\S]*?)(?:"\s*,\s*"|"\s*\}|"$)/);
-    if (codeMatch) {
-      result.code = {
-        proposedContent: codeMatch[1]
-          .replace(/\\n/g, '\n')
-          .replace(/\\t/g, '\t')
-          .replace(/\\"/g, '"'),
-        fileName: 'sketch.ino',
-        summary: 'Updated firmware code',
-      };
-    }
-  } catch {}
-
-  return Object.keys(result).length > 0 ? result : null;
-}
-
 function extractFirmwareCode(text: string): string | null {
   if (!text) return null;
-  // Look for code blocks (tagged or untagged)
-  const codeBlockRegex = /```(?:cpp|c|c\+\+|arduino|ino|python|py)?\s*([\s\S]*?)```/gi;
-  let match: RegExpExecArray | null;
-  let candidateCode: string | null = null;
 
-  while ((match = codeBlockRegex.exec(text)) !== null) {
-    const code = match[1].trim();
-    if (code.length > 25) {
-      if (
-        code.includes('setup()') ||
-        code.includes('loop()') ||
-        code.includes('#include') ||
-        code.includes('pinMode') ||
-        code.includes('digitalWrite') ||
-        code.includes('analogRead') ||
-        code.includes('Serial.') ||
-        code.includes('import ') ||
-        code.includes('def ')
-      ) {
-        return code;
-      }
-      if (!candidateCode && code.split('\n').length > 3) {
-        candidateCode = code;
-      }
+  const cppMatch = text.match(/```(?:cpp|c|arduino|ino)\s*([\s\S]*?)\s*```/i);
+  if (cppMatch && cppMatch[1].trim().length > 20) {
+    return cppMatch[1].trim();
+  }
+
+  const pyMatch = text.match(/```(?:python|py|micropython)\s*([\s\S]*?)\s*```/i);
+  if (pyMatch && pyMatch[1].trim().length > 20) {
+    return pyMatch[1].trim();
+  }
+
+  const genericMatch = text.match(/```\s*([\s\S]*?)\s*```/);
+  if (genericMatch && genericMatch[1].trim().length > 30) {
+    const code = genericMatch[1].trim();
+    if (
+      code.includes('void setup()') ||
+      code.includes('void loop()') ||
+      code.includes('#include') ||
+      code.includes('pinMode(') ||
+      code.includes('digitalWrite(') ||
+      code.includes('import machine') ||
+      code.includes('from machine import')
+    ) {
+      return code;
     }
   }
 
-  return candidateCode;
+  return null;
 }
 
-export const useAIStore = create<AIState>()(
+/**
+ * Safely parses structured velxio-action JSON
+ */
+function safeParseActionJson(rawText: string): any {
+  if (!rawText) return null;
+  const cleaned = rawText
+    .replace(/^```json\s*/i, '')
+    .replace(/^```velxio-action\s*/i, '')
+    .replace(/```\s*$/i, '')
+    .trim();
+
+  try {
+    return JSON.parse(cleaned);
+  } catch (e1) {
+    try {
+      const sanitized = cleaned
+        .replace(/,\s*([\]}])/g, '$1')
+        .replace(/([{,]\s*)([a-zA-Z0-9_]+)\s*:/g, '$1"$2":')
+        .replace(/\/\/.*/g, '');
+      return JSON.parse(sanitized);
+    } catch (e2) {
+      console.warn('[useAIStore] Failed to parse velxio-action block JSON:', e1);
+      return null;
+    }
+  }
+}
+
+export const useAIStore = create<AIStoreState>()(
   persist(
     (set, get) => ({
-      messages: [
-        {
-          id: 'welcome',
-          role: 'assistant',
-          content: `👋 **Welcome to VelxioAI Studio!**\n\nI am your **Embedded Hardware & Firmware Co-Pilot**.\n\nYou can ask me to design circuits from scratch, write pin-accurate microcontroller code, diagnose compilation or SPICE errors, or explain electronic concepts.\n\n⚡ **Try asking:**\n- *"Build an ultrasonic distance alarm with an HC-SR04 and buzzer"* \n- *"Create a night-light using an LDR sensor and LED"* \n- *"Optimize my code to use non-blocking millis() instead of delay()"*\n- *"Explain how pull-up resistors work"*\n\n*(Click ⚙️ in the top-right to configure your Gemini, Groq, or Claude API key)*`,
-          timestamp: Date.now(),
-        },
-      ],
+      settings: DEFAULT_SETTINGS,
+      messages: [],
       isStreaming: false,
       streamingContent: '',
       streamingReasoning: '',
       streamingSteps: [],
       dockOpen: false,
-      dockWidth: 380,
-      settingsModalOpen: false,
-      settings: DEFAULT_SETTINGS,
+      dockWidth: 420,
+      selectedTemplateId: null,
       checkpointSnapshot: null,
 
-      toggleDock: (open) => {
-        set((state) => ({
-          dockOpen: open !== undefined ? open : !state.dockOpen,
-        }));
-      },
-
-      setDockWidth: (width) => {
-        const clamped = Math.max(280, Math.min(750, width));
-        set({ dockWidth: clamped });
-      },
-
-      openSettingsModal: () => set({ settingsModalOpen: true }),
-      closeSettingsModal: () => set({ settingsModalOpen: false }),
+      setDockOpen: (open) => set({ dockOpen: open }),
+      setDockWidth: (width) => set({ dockWidth: Math.max(320, Math.min(800, width)) }),
 
       updateSettings: (partial) => {
         set((state) => ({
@@ -317,6 +241,12 @@ export const useAIStore = create<AIState>()(
                     }
                     if (actionData.steps) steps = actionData.steps;
 
+                    // Board Kind switch
+                    if (actionData.boardKind) {
+                      AgentToolEngine.setBoard(actionData.boardKind);
+                    }
+
+                    // Circuit Synthesis
                     if (
                       actionData.circuit &&
                       ((actionData.circuit.componentsToAdd && actionData.circuit.componentsToAdd.length > 0) ||
@@ -326,6 +256,7 @@ export const useAIStore = create<AIState>()(
                         id: `circuit-${Date.now()}`,
                         title: actionData.circuit.title || 'Circuit Modification',
                         description: actionData.circuit.description || '',
+                        boardKind: actionData.boardKind || actionData.circuit.boardKind,
                         componentsToAdd: actionData.circuit.componentsToAdd || [],
                         componentsToRemove: actionData.circuit.componentsToRemove || [],
                         wiresToAdd: actionData.circuit.wiresToAdd || [],
@@ -334,6 +265,7 @@ export const useAIStore = create<AIState>()(
                       };
                     }
 
+                    // Code Synthesis
                     if (actionData.code && actionData.code.proposedContent && actionData.code.proposedContent.trim().length > 0) {
                       const activeFile = editorState.files.find((f) => f.name === actionData.code.fileName) || editorState.files[0];
                       codeProposal = {
@@ -347,7 +279,13 @@ export const useAIStore = create<AIState>()(
                       };
                     }
 
-                    if (actionData.learningCard && actionData.learningCard.title && actionData.learningCard.summary) {
+                    // Learning Card (only if requested or in explainMode)
+                    if (
+                      (state.settings.explainMode || promptText.toLowerCase().includes('learn') || promptText.toLowerCase().includes('explain')) &&
+                      actionData.learningCard &&
+                      actionData.learningCard.title &&
+                      actionData.learningCard.summary
+                    ) {
                       learningCard = {
                         id: `learn-${Date.now()}`,
                         ...actionData.learningCard,
@@ -363,8 +301,18 @@ export const useAIStore = create<AIState>()(
                   }
                 }
 
-                // Fallback: If no codeProposal extracted yet, check for markdown code blocks
-                if (!codeProposal) {
+                // Fallback for code: If LLM output markdown code block in an action-oriented query
+                const isActionQuery =
+                  promptText.toLowerCase().includes('create') ||
+                  promptText.toLowerCase().includes('build') ||
+                  promptText.toLowerCase().includes('write') ||
+                  promptText.toLowerCase().includes('code') ||
+                  promptText.toLowerCase().includes('make') ||
+                  promptText.toLowerCase().includes('fix') ||
+                  promptText.toLowerCase().includes('counter') ||
+                  promptText.toLowerCase().includes('sensor');
+
+                if (!codeProposal && isActionQuery) {
                   const extractedCode = extractFirmwareCode(fullText);
                   if (extractedCode) {
                     const freshEditorState = useEditorStore.getState();
@@ -383,16 +331,7 @@ export const useAIStore = create<AIState>()(
                   }
                 }
 
-                // Fallback: If no circuitProposal extracted yet, synthesize hardware components & wiring from text
-                if (!circuitProposal && !cleanContent.toLowerCase().startsWith('hi') && !cleanContent.toLowerCase().startsWith('hello')) {
-                  const freshSimState = useSimulatorStore.getState();
-                  const synth = CircuitSynthesizer.synthesizeFromText(fullText, freshSimState.boards[0]?.boardKind || 'arduino-uno');
-                  if (synth) {
-                    circuitProposal = synth;
-                  }
-                }
-
-                // Auto-apply circuit and code proposals autonomously (Cursor IDE mode)
+                // Execute Agent Actions deterministically
                 if (circuitProposal) {
                   get().applyCircuitProposal(circuitProposal);
                 }
@@ -460,117 +399,15 @@ export const useAIStore = create<AIState>()(
       },
 
       applyCircuitProposal: (proposal) => {
-        const simStore = useSimulatorStore.getState();
-        const registry = ComponentRegistry.getInstance();
-        const board = simStore.boards.find((b) => b.id === simStore.activeBoardId) || simStore.boards[0];
-        const boardId = board?.id || 'arduino-uno';
-
-        // Helper to check if an ID or type refers to the active MCU board
-        const isBoardRef = (partName: string) => {
-          if (!partName) return false;
-          const p = partName.toLowerCase().replace(/[-_]/g, '');
-          const bKind = (board?.boardKind || '').toLowerCase().replace(/[-_]/g, '');
-          return (
-            p === 'board' ||
-            p === 'arduino' ||
-            p === 'arduinouno' ||
-            p === 'mcu' ||
-            p === 'uno' ||
-            p === 'esp32' ||
-            p === 'pico' ||
-            p === bKind ||
-            p.includes('arduino') ||
-            p.includes('board') ||
-            p.includes('uno')
-          );
-        };
-
-        const partIdMap: Record<string, string> = {
-          board: boardId,
-          arduino: boardId,
-          uno: boardId,
-          'arduino-uno': boardId,
-        };
-
-        // 1. Add Components with normalized metadata IDs
-        if (proposal.componentsToAdd && proposal.componentsToAdd.length > 0) {
-          proposal.componentsToAdd.forEach((comp, idx) => {
-            if (isBoardRef(comp.id) || isBoardRef(comp.type)) {
-              if (comp.id) partIdMap[comp.id] = boardId;
-              if (comp.type) partIdMap[comp.type] = boardId;
-              return;
-            }
-
-            const rawType = (comp.type || 'led').replace(/^(wokwi|velxio)-/, '').toLowerCase();
-            const meta = registry.getById(rawType) || registry.getById('led');
-            const canonicalMetadataId = meta ? meta.id : rawType;
-
-            const safeId = comp.id || `${canonicalMetadataId.replace(/-/g, '_')}_${Date.now()}_${idx}`;
-            partIdMap[comp.id || ''] = safeId;
-            partIdMap[rawType] = safeId;
-
-            simStore.recordAddComponent({
-              id: safeId,
-              metadataId: canonicalMetadataId,
-              x: comp.left || (280 + (idx % 3) * 140),
-              y: comp.top || (120 + Math.floor(idx / 3) * 120),
-              properties: { ...(comp.attrs || {}) },
-            });
-          });
-        }
-
-        // 2. Add Wires with resolved component IDs
-        if (proposal.wiresToAdd && proposal.wiresToAdd.length > 0) {
-          for (const w of proposal.wiresToAdd) {
-            const fromId = isBoardRef(w.fromPart) ? boardId : (partIdMap[w.fromPart] || w.fromPart);
-            const toId = isBoardRef(w.toPart) ? boardId : (partIdMap[w.toPart] || w.toPart);
-
-            simStore.recordAddWire({
-              id: `wire_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
-              start: { componentId: fromId, pinName: w.fromPin, x: 0, y: 0 },
-              end: { componentId: toId, pinName: w.toPin, x: 0, y: 0 },
-              waypoints: [],
-              color: w.color || '#2563eb',
-            });
-          }
-        }
-
-        // 3. Request recalculation of wire positions
-        setTimeout(() => {
-          simStore.recalculateAllWirePositions?.();
-        }, 150);
-
+        AgentToolEngine.applyCircuit(proposal);
         proposal.applied = true;
         set((s) => ({ messages: [...s.messages] }));
       },
 
       applyCodeProposal: (proposal) => {
-        const editorStore = useEditorStore.getState();
-        const simStore = useSimulatorStore.getState();
+        AgentToolEngine.writeFile(proposal.fileName || 'sketch.ino', proposal.proposedContent);
 
-        // Always prefer the existing sketch file (main-sketch) — never create duplicates
-        let targetFile =
-          editorStore.files.find((f) => f.name === proposal.fileName) ||
-          editorStore.files.find((f) => f.name.endsWith('.ino') || f.name.endsWith('.py') || f.name.endsWith('.cpp')) ||
-          editorStore.files[0];
-
-        if (targetFile) {
-          // Write into the existing file
-          editorStore.setFileContent(targetFile.id, proposal.proposedContent);
-          // Ensure this file tab is open & active so Monaco shows it
-          editorStore.openFile(targetFile.id);
-          editorStore.setActiveFile(targetFile.id);
-        } else {
-          // createFile(name) returns the new id — but it creates an EMPTY file
-          // We must then call setFileContent to actually write code into it
-          const newId = editorStore.createFile(proposal.fileName || 'sketch.ino');
-          editorStore.setFileContent(newId, proposal.proposedContent);
-          // File is auto-opened and activated by createFile, but be explicit
-          editorStore.openFile(newId);
-          editorStore.setActiveFile(newId);
-        }
-
-        // Auto-detect and add required Arduino libraries to libraries.txt and board.libraries
+        // Auto-detect and install required Arduino libraries
         const requiredLibs: string[] = [];
         if (
           proposal.proposedContent.includes('LiquidCrystal.h') ||
@@ -592,29 +429,27 @@ export const useAIStore = create<AIState>()(
         }
 
         if (requiredLibs.length > 0) {
-          const libFile = editorStore.files.find((f) => f.name === 'libraries.txt');
-          if (libFile) {
-            const existing = libFile.content.split('\n').map((l) => l.trim());
-            const toAdd = requiredLibs.filter((lib) => !existing.includes(lib));
-            if (toAdd.length > 0) {
-              editorStore.setFileContent(libFile.id, `${libFile.content.trim()}\n${toAdd.join('\n')}\n`);
-            }
-          } else {
-            const libId = editorStore.createFile('libraries.txt');
-            editorStore.setFileContent(libId, `# Libraries automatically installed by VelxioAI\n${requiredLibs.join('\n')}\n`);
-          }
-
-          // Register in active simulator board
-          const activeBoard = simStore.boards.find((b) => b.id === simStore.activeBoardId) || simStore.boards[0];
-          if (activeBoard) {
-            const existingLibs = activeBoard.libraries || [];
-            const merged = Array.from(new Set([...existingLibs, ...requiredLibs]));
-            simStore.updateBoard(activeBoard.id, { libraries: merged });
-          }
+          AgentToolEngine.installLibraries(requiredLibs);
         }
 
         proposal.applied = true;
         set((s) => ({ messages: [...s.messages] }));
+      },
+
+      compileProject: async () => {
+        await AgentToolEngine.compileProject();
+      },
+
+      startSimulation: () => {
+        AgentToolEngine.startSimulation();
+      },
+
+      stopSimulation: () => {
+        AgentToolEngine.stopSimulation();
+      },
+
+      beautifyCircuit: () => {
+        AgentToolEngine.beautifyCircuit();
       },
 
       rollbackCheckpoint: () => {

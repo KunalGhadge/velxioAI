@@ -1,0 +1,385 @@
+/**
+ * VelxioAI Studio — Unified Autonomous Agent Tool Engine
+ *
+ * Provides a clean, programmatic tool execution layer that the AI Agent
+ * uses to inspect, build, edit, compile, simulate, and debug embedded projects.
+ */
+
+import { useEditorStore } from '../store/useEditorStore';
+import { useSimulatorStore } from '../store/useSimulatorStore';
+import { useCompileLogsStore } from '../store/useCompileLogsStore';
+import { runEditorCommand, hasEditorCommand } from '../lib/editorCommands';
+import { CircuitLayoutEngine } from './CircuitLayoutEngine';
+import type { BoardKind } from '../types/board';
+import type { CircuitProposal, CodeProposal } from './types';
+
+export interface ToolExecutionResult {
+  success: boolean;
+  message: string;
+  data?: any;
+}
+
+export class AgentToolEngine {
+  // ── File Management Tools ──────────────────────────────────────────
+
+  /**
+   * Creates or overwrites a file in the workspace and opens it in Monaco.
+   */
+  public static async writeFile(fileName: string, content: string): Promise<ToolExecutionResult> {
+    try {
+      const editor = useEditorStore.getState();
+      const existing = editor.files.find((f) => f.name === fileName);
+
+      if (existing) {
+        editor.setFileContent(existing.id, content);
+        editor.openFile(existing.id);
+        editor.setActiveFile(existing.id);
+        return { success: true, message: `Updated file "${fileName}"`, data: { id: existing.id } };
+      } else {
+        const newId = editor.createFile(fileName);
+        editor.setFileContent(newId, content);
+        editor.openFile(newId);
+        editor.setActiveFile(newId);
+        return { success: true, message: `Created file "${fileName}"`, data: { id: newId } };
+      }
+    } catch (err: any) {
+      return { success: false, message: `Failed to write file "${fileName}": ${err.message}` };
+    }
+  }
+
+  /**
+   * Reads a file's content from the workspace.
+   */
+  public static readFile(fileName: string): string | null {
+    const editor = useEditorStore.getState();
+    const file = editor.files.find((f) => f.name === fileName);
+    return file ? file.content : null;
+  }
+
+  /**
+   * Deletes a file from the workspace.
+   */
+  public static deleteFile(fileName: string): ToolExecutionResult {
+    try {
+      const editor = useEditorStore.getState();
+      const file = editor.files.find((f) => f.name === fileName);
+      if (!file) {
+        return { success: false, message: `File "${fileName}" not found` };
+      }
+      editor.deleteFile(file.id);
+      return { success: true, message: `Deleted file "${fileName}"` };
+    } catch (err: any) {
+      return { success: false, message: `Failed to delete file "${fileName}": ${err.message}` };
+    }
+  }
+
+  /**
+   * Installs required C++/MicroPython libraries into libraries.txt and active board manifest.
+   */
+  public static installLibraries(requiredLibs: string[]): ToolExecutionResult {
+    if (!requiredLibs || requiredLibs.length === 0) {
+      return { success: true, message: 'No libraries requested' };
+    }
+
+    try {
+      const editor = useEditorStore.getState();
+      const sim = useSimulatorStore.getState();
+
+      const libFile = editor.files.find((f) => f.name === 'libraries.txt');
+      if (libFile) {
+        const existing = libFile.content.split('\n').map((l) => l.trim());
+        const toAdd = requiredLibs.filter((l) => !existing.includes(l));
+        if (toAdd.length > 0) {
+          editor.setFileContent(libFile.id, `${libFile.content.trim()}\n${toAdd.join('\n')}\n`);
+        }
+      } else {
+        const id = editor.createFile('libraries.txt');
+        editor.setFileContent(id, `# Libraries managed by VelxioAI Studio\n${requiredLibs.join('\n')}\n`);
+      }
+
+      // Sync into active board manifest
+      const activeBoard = sim.boards.find((b) => b.id === sim.activeBoardId) || sim.boards[0];
+      if (activeBoard) {
+        const existing = activeBoard.libraries || [];
+        const merged = Array.from(new Set([...existing, ...requiredLibs]));
+        sim.updateBoard(activeBoard.id, { libraries: merged });
+      }
+
+      return {
+        success: true,
+        message: `Installed libraries: ${requiredLibs.join(', ')}`,
+        data: { libraries: requiredLibs },
+      };
+    } catch (err: any) {
+      return { success: false, message: `Failed to install libraries: ${err.message}` };
+    }
+  }
+
+  // ── Board & Circuit Management Tools ───────────────────────────────
+
+  /**
+   * Sets or switches the active microcontroller board on canvas.
+   */
+  public static setBoard(boardKind: BoardKind): ToolExecutionResult {
+    try {
+      const sim = useSimulatorStore.getState();
+      const existing = sim.boards.find((b) => b.boardKind === boardKind);
+
+      if (existing) {
+        sim.setActiveBoard(existing.id);
+        return { success: true, message: `Active board set to ${boardKind}` };
+      }
+
+      // If current board is different, add the requested board
+      if (sim.boards.length === 0) {
+        sim.addBoard(boardKind);
+      } else {
+        // Switch board kind of the primary board
+        const primary = sim.boards[0];
+        sim.updateBoard(primary.id, { boardKind });
+      }
+
+      // Position the board neatly on the left
+      const activeBoardId = useSimulatorStore.getState().activeBoardId || sim.boards[0]?.id;
+      if (activeBoardId) {
+        sim.setBoardPosition(CircuitLayoutEngine.BOARD_ORIGIN, activeBoardId);
+      }
+
+      return { success: true, message: `Configured board: ${boardKind}` };
+    } catch (err: any) {
+      return { success: false, message: `Failed to set board: ${err.message}` };
+    }
+  }
+
+  /**
+   * Clears all peripheral components and wires from the canvas (keeps the board).
+   */
+  public static clearCircuit(): ToolExecutionResult {
+    try {
+      const sim = useSimulatorStore.getState();
+      sim.clearAllComponents();
+      return { success: true, message: 'Cleared canvas circuit' };
+    } catch (err: any) {
+      return { success: false, message: `Failed to clear circuit: ${err.message}` };
+    }
+  }
+
+  /**
+   * Applies a complete circuit proposal with deterministic auto-layout & color-coding.
+   */
+  public static applyCircuit(proposal: CircuitProposal): ToolExecutionResult {
+    try {
+      const sim = useSimulatorStore.getState();
+
+      // 1. Ensure board matches proposal
+      if (proposal.boardKind) {
+        this.setBoard(proposal.boardKind);
+      } else if (sim.boards.length === 0) {
+        this.setBoard('arduino-uno');
+      }
+
+      // 2. Position board at standard origin
+      const currentBoard = sim.boards[0];
+      if (currentBoard) {
+        sim.setBoardPosition(CircuitLayoutEngine.BOARD_ORIGIN, currentBoard.id);
+      }
+
+      // 3. Remove obsolete components
+      if (proposal.componentsToRemove && proposal.componentsToRemove.length > 0) {
+        proposal.componentsToRemove.forEach((cid) => {
+          try {
+            sim.removeComponent(cid);
+          } catch {}
+        });
+      }
+
+      // 4. Calculate clean grid positions for all new components
+      const existingCount = sim.components.length;
+      const laidOutComponents = CircuitLayoutEngine.layoutComponents(
+        proposal.componentsToAdd || [],
+        existingCount
+      );
+
+      laidOutComponents.forEach((comp) => {
+        try {
+          const typeName = comp.type.replace(/^wokwi-/, '');
+          sim.addComponent(
+            typeName,
+            comp.left,
+            comp.top,
+            comp.rotate || 0,
+            comp.attrs || {},
+            comp.id
+          );
+        } catch (e) {
+          console.warn(`[AgentToolEngine] Failed to add component ${comp.id}:`, e);
+        }
+      });
+
+      // 5. Connect wires with standardized colors
+      const boardId = currentBoard?.id || 'arduino-uno';
+      const normalizedWires = CircuitLayoutEngine.normalizeWires(proposal.wiresToAdd || []);
+
+      setTimeout(() => {
+        normalizedWires.forEach((wire) => {
+          try {
+            const fromId =
+              wire.fromPart === 'board' || wire.fromPart === 'uno' || wire.fromPart === 'mcu'
+                ? boardId
+                : wire.fromPart;
+            const toId =
+              wire.toPart === 'board' || wire.toPart === 'uno' || wire.toPart === 'mcu'
+                ? boardId
+                : wire.toPart;
+
+            sim.startWireCreation({ componentId: fromId, pinName: wire.fromPin, x: 0, y: 0 }, wire.color);
+            sim.finishWireCreation({ componentId: toId, pinName: wire.toPin, x: 0, y: 0 });
+          } catch (e) {
+            console.warn(`[AgentToolEngine] Failed to connect wire ${wire.fromPin} -> ${wire.toPin}:`, e);
+          }
+        });
+
+        // Recalculate wire geometry
+        setTimeout(() => {
+          sim.recalculateAllWirePositions();
+        }, 150);
+      }, 100);
+
+      return {
+        success: true,
+        message: `Built circuit: ${proposal.title || 'Components & Wires Placed'}`,
+        data: {
+          componentsAdded: laidOutComponents.length,
+          wiresAdded: normalizedWires.length,
+        },
+      };
+    } catch (err: any) {
+      return { success: false, message: `Failed to apply circuit: ${err.message}` };
+    }
+  }
+
+  /**
+   * Auto-arranges all placed components in a clean non-overlapping grid next to the board.
+   */
+  public static beautifyCircuit(): ToolExecutionResult {
+    try {
+      const sim = useSimulatorStore.getState();
+      const comps = sim.components;
+      if (comps.length === 0) {
+        return { success: true, message: 'No components to beautify' };
+      }
+
+      comps.forEach((comp, idx) => {
+        const col = Math.floor(idx / CircuitLayoutEngine.MAX_ROWS_PER_COL);
+        const row = idx % CircuitLayoutEngine.MAX_ROWS_PER_COL;
+        const newX = CircuitLayoutEngine.GRID_START_X + col * CircuitLayoutEngine.COLUMN_SPACING;
+        const newY = CircuitLayoutEngine.GRID_START_Y + row * CircuitLayoutEngine.ROW_SPACING;
+        sim.updateComponent(comp.id, { x: newX, y: newY } as any);
+      });
+
+      setTimeout(() => {
+        sim.recalculateAllWirePositions();
+      }, 100);
+
+      return { success: true, message: `Beautified ${comps.length} components into clean layout` };
+    } catch (err: any) {
+      return { success: false, message: `Failed to beautify circuit: ${err.message}` };
+    }
+  }
+
+  // ── Simulation & Compilation Execution Tools ───────────────────────
+
+  /**
+   * Triggers project compilation via the editor command bus.
+   */
+  public static async compileProject(): Promise<ToolExecutionResult> {
+    try {
+      if (hasEditorCommand('sim.compile')) {
+        runEditorCommand('sim.compile');
+        return { success: true, message: 'Compilation started' };
+      }
+      return { success: false, message: 'Compiler is not currently available' };
+    } catch (err: any) {
+      return { success: false, message: `Failed to start compilation: ${err.message}` };
+    }
+  }
+
+  /**
+   * Starts the simulation.
+   */
+  public static startSimulation(): ToolExecutionResult {
+    try {
+      if (hasEditorCommand('sim.run')) {
+        runEditorCommand('sim.run');
+        return { success: true, message: 'Simulation started' };
+      }
+      return { success: false, message: 'Simulation runner is not currently ready' };
+    } catch (err: any) {
+      return { success: false, message: `Failed to start simulation: ${err.message}` };
+    }
+  }
+
+  /**
+   * Stops the running simulation.
+   */
+  public static stopSimulation(): ToolExecutionResult {
+    try {
+      if (hasEditorCommand('sim.stop')) {
+        runEditorCommand('sim.stop');
+        return { success: true, message: 'Simulation stopped' };
+      }
+      return { success: false, message: 'Simulation stop command not found' };
+    } catch (err: any) {
+      return { success: false, message: `Failed to stop simulation: ${err.message}` };
+    }
+  }
+
+  /**
+   * Resets the active microcontroller.
+   */
+  public static resetBoard(): ToolExecutionResult {
+    try {
+      if (hasEditorCommand('sim.resetBoard')) {
+        runEditorCommand('sim.resetBoard');
+        return { success: true, message: 'Microcontroller reset' };
+      }
+      return { success: false, message: 'Reset command not found' };
+    } catch (err: any) {
+      return { success: false, message: `Failed to reset board: ${err.message}` };
+    }
+  }
+
+  /**
+   * Reads recent Serial Monitor text from the active board.
+   */
+  public static readSerial(): string {
+    const sim = useSimulatorStore.getState();
+    const activeBoard = sim.boards.find((b) => b.id === sim.activeBoardId) || sim.boards[0];
+    return activeBoard?.serialOutput || '';
+  }
+
+  /**
+   * Writes input text to the running board's Serial port.
+   */
+  public static writeSerial(input: string): ToolExecutionResult {
+    try {
+      const sim = useSimulatorStore.getState();
+      const activeBoard = sim.boards.find((b) => b.id === sim.activeBoardId) || sim.boards[0];
+      if (!activeBoard) {
+        return { success: false, message: 'No active board found' };
+      }
+      sim.serialWriteToBoard(activeBoard.id, input);
+      return { success: true, message: `Sent "${input}" to Serial` };
+    } catch (err: any) {
+      return { success: false, message: `Failed to write serial: ${err.message}` };
+    }
+  }
+
+  /**
+   * Retrieves recent compiler errors and warnings.
+   */
+  public static getCompileLogs(): string[] {
+    const logs = useCompileLogsStore.getState().logs || [];
+    return logs.map((l) => (typeof l === 'string' ? l : `[${l.type.toUpperCase()}] ${l.message}`));
+  }
+}
