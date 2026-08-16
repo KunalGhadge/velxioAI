@@ -104,30 +104,89 @@ function extractFirmwareCode(text: string): string | null {
 }
 
 /**
- * Safely parses structured velxio-action JSON
+ * Resilient Action & JSON parser that handles markdown fences, raw JSON,
+ * Python triple quotes ("""), and unescaped newlines.
  */
-function safeParseActionJson(rawText: string): any {
-  if (!rawText) return null;
-  const cleaned = rawText
-    .replace(/^```json\s*/i, '')
-    .replace(/^```velxio-action\s*/i, '')
-    .replace(/```\s*$/i, '')
-    .trim();
+export function extractVelxioAction(text: string): { cleanContent: string; actionData: any } {
+  if (!text) return { cleanContent: text, actionData: null };
 
-  try {
-    return JSON.parse(cleaned);
-  } catch (e1) {
-    try {
-      const sanitized = cleaned
-        .replace(/,\s*([\]}])/g, '$1')
-        .replace(/([{,]\s*)([a-zA-Z0-9_]+)\s*:/g, '$1"$2":')
-        .replace(/\/\/.*/g, '');
-      return JSON.parse(sanitized);
-    } catch (e2) {
-      console.warn('[useAIStore] Failed to parse velxio-action block JSON:', e1);
-      return null;
+  let rawActionStr = '';
+  let cleanContent = text;
+
+  // 1. Try matching with markdown fences ```velxio-action ... ``` or ```json ... ```
+  const fenceMatch = text.match(/```(?:velxio-action|json)?\s*([\s\S]*?)\s*```/i);
+  if (
+    fenceMatch &&
+    (fenceMatch[1].includes('"circuit"') ||
+      fenceMatch[1].includes('"code"') ||
+      fenceMatch[1].includes('"boardKind"') ||
+      fenceMatch[1].includes('"steps"'))
+  ) {
+    rawActionStr = fenceMatch[1];
+    cleanContent = text.replace(fenceMatch[0], '').trim();
+  } else {
+    // 2. Try matching raw JSON block without backticks if it has action keys
+    const rawMatch = text.match(/(?:velxio-action\s*)?(\{[\s\S]*"(?:circuit|code|boardKind|steps)"[\s\S]*\})/i);
+    if (rawMatch) {
+      rawActionStr = rawMatch[1];
+      cleanContent = text.replace(rawMatch[0], '').replace(/^velxio-action\s*/i, '').trim();
     }
   }
+
+  if (!rawActionStr) {
+    return { cleanContent: text, actionData: null };
+  }
+
+  // Pre-process rawActionStr to repair invalid JSON patterns commonly produced by LLMs:
+  // a) Replace Python-style triple quotes """ ... """ with standard JSON string
+  let sanitized = rawActionStr.replace(/"""([\s\S]*?)"""/g, (_, code) => {
+    return JSON.stringify(code.trim());
+  });
+
+  // b) Strip trailing commas before } or ]
+  sanitized = sanitized.replace(/,\s*([\]}])/g, '$1');
+
+  let parsed: any = null;
+  try {
+    parsed = JSON.parse(sanitized);
+  } catch (e1) {
+    try {
+      // Fix unquoted keys
+      const repaired = sanitized.replace(/([{,]\s*)([a-zA-Z0-9_]+)\s*:/g, '$1"$2":');
+      parsed = JSON.parse(repaired);
+    } catch (e2) {
+      // Direct regex fallback
+      parsed = {};
+      const boardMatch = sanitized.match(/"boardKind"\s*:\s*"([^"]+)"/);
+      if (boardMatch) parsed.boardKind = boardMatch[1];
+
+      const reasoningMatch = sanitized.match(/"reasoning"\s*:\s*"([^"]+)"/);
+      if (reasoningMatch) parsed.reasoning = reasoningMatch[1];
+
+      const codeMatch = sanitized.match(/"proposedContent"\s*:\s*(?:"""|"|`)([\s\S]*?)(?:"""|"|`)(?=\s*,\s*"\w+"|\s*})/);
+      if (codeMatch) {
+        parsed.code = {
+          fileName: 'sketch.ino',
+          proposedContent: codeMatch[1].trim(),
+          summary: 'Firmware Code',
+        };
+      }
+
+      const compMatches = [...sanitized.matchAll(/\{\s*"id"\s*:\s*"([^"]+)"\s*,\s*"type"\s*:\s*"([^"]+)"/g)];
+      if (compMatches.length > 0) {
+        parsed.circuit = {
+          title: 'Synthesized Circuit',
+          componentsToAdd: compMatches.map((m) => ({ id: m[1], type: m[2] })),
+          wiresToAdd: [],
+        };
+      }
+    }
+  }
+
+  return {
+    cleanContent: cleanContent || parsed?.reasoning || 'Executed requested actions.',
+    actionData: parsed,
+  };
 }
 
 export const useAIStore = create<AIStoreState>()(
@@ -224,8 +283,9 @@ export const useAIStore = create<AIStoreState>()(
                 set({ streamingReasoning: accumulatedReasoning });
               },
               onComplete: (fullText, fullReasoning) => {
-                // 3. Parse Action Blocks (```velxio-action ... ```)
-                let cleanContent = fullText;
+                // 3. Resilient Action Extraction
+                const { cleanContent, actionData } = extractVelxioAction(fullText);
+
                 let circuitProposal: CircuitProposal | undefined;
                 let codeProposal: CodeProposal | undefined;
                 let learningCard: HardwareLearningCardData | undefined;
@@ -233,73 +293,68 @@ export const useAIStore = create<AIStoreState>()(
                 let steps: ActionStep[] | undefined;
                 let reasoningText = fullReasoning;
 
-                const actionMatch = fullText.match(/```velxio-action\s*([\s\S]*?)\s*```/);
-                if (actionMatch) {
-                  cleanContent = fullText.replace(actionMatch[0], '').trim();
-                  const actionData = safeParseActionJson(actionMatch[1]);
-                  if (actionData) {
-                    if (actionData.reasoning && !reasoningText) {
-                      reasoningText = actionData.reasoning;
-                    }
-                    if (actionData.steps) steps = actionData.steps;
+                if (actionData) {
+                  if (actionData.reasoning && !reasoningText) {
+                    reasoningText = actionData.reasoning;
+                  }
+                  if (actionData.steps) steps = actionData.steps;
 
-                    // Board Kind switch
-                    if (actionData.boardKind) {
-                      AgentToolEngine.setBoard(actionData.boardKind);
-                    }
+                  // Board switch
+                  if (actionData.boardKind) {
+                    AgentToolEngine.setBoard(actionData.boardKind);
+                  }
 
-                    // Circuit Synthesis
-                    if (
-                      actionData.circuit &&
-                      ((actionData.circuit.componentsToAdd && actionData.circuit.componentsToAdd.length > 0) ||
-                        (actionData.circuit.wiresToAdd && actionData.circuit.wiresToAdd.length > 0))
-                    ) {
-                      circuitProposal = {
-                        id: `circuit-${Date.now()}`,
-                        title: actionData.circuit.title || 'Circuit Modification',
-                        description: actionData.circuit.description || '',
-                        boardKind: actionData.boardKind || actionData.circuit.boardKind,
-                        componentsToAdd: actionData.circuit.componentsToAdd || [],
-                        componentsToRemove: actionData.circuit.componentsToRemove || [],
-                        wiresToAdd: actionData.circuit.wiresToAdd || [],
-                        wiresToRemove: actionData.circuit.wiresToRemove || [],
-                        applied: false,
-                      };
-                    }
+                  // Circuit Synthesis
+                  if (
+                    actionData.circuit &&
+                    ((actionData.circuit.componentsToAdd && actionData.circuit.componentsToAdd.length > 0) ||
+                      (actionData.circuit.wiresToAdd && actionData.circuit.wiresToAdd.length > 0))
+                  ) {
+                    circuitProposal = {
+                      id: `circuit-${Date.now()}`,
+                      title: actionData.circuit.title || 'Circuit Modification',
+                      description: actionData.circuit.description || '',
+                      boardKind: actionData.boardKind || actionData.circuit.boardKind,
+                      componentsToAdd: actionData.circuit.componentsToAdd || [],
+                      componentsToRemove: actionData.circuit.componentsToRemove || [],
+                      wiresToAdd: actionData.circuit.wiresToAdd || [],
+                      wiresToRemove: actionData.circuit.wiresToRemove || [],
+                      applied: false,
+                    };
+                  }
 
-                    // Code Synthesis
-                    if (actionData.code && actionData.code.proposedContent && actionData.code.proposedContent.trim().length > 0) {
-                      const activeFile = editorState.files.find((f) => f.name === actionData.code.fileName) || editorState.files[0];
-                      codeProposal = {
-                        id: `code-${Date.now()}`,
-                        fileId: activeFile?.id || 'sketch.ino',
-                        fileName: actionData.code.fileName || 'sketch.ino',
-                        originalContent: activeFile?.content || '',
-                        proposedContent: actionData.code.proposedContent || '',
-                        summary: actionData.code.summary || 'Updated firmware code',
-                        applied: false,
-                      };
-                    }
+                  // Code Synthesis
+                  if (actionData.code && actionData.code.proposedContent && actionData.code.proposedContent.trim().length > 0) {
+                    const activeFile = editorState.files.find((f) => f.name === actionData.code.fileName) || editorState.files[0];
+                    codeProposal = {
+                      id: `code-${Date.now()}`,
+                      fileId: activeFile?.id || 'sketch.ino',
+                      fileName: actionData.code.fileName || 'sketch.ino',
+                      originalContent: activeFile?.content || '',
+                      proposedContent: actionData.code.proposedContent || '',
+                      summary: actionData.code.summary || 'Updated firmware code',
+                      applied: false,
+                    };
+                  }
 
-                    // Learning Card (only if requested or in explainMode)
-                    if (
-                      (state.settings.explainMode || promptText.toLowerCase().includes('learn') || promptText.toLowerCase().includes('explain')) &&
-                      actionData.learningCard &&
-                      actionData.learningCard.title &&
-                      actionData.learningCard.summary
-                    ) {
-                      learningCard = {
-                        id: `learn-${Date.now()}`,
-                        ...actionData.learningCard,
-                      };
-                    }
+                  // Learning Card (if requested)
+                  if (
+                    (state.settings.explainMode || promptText.toLowerCase().includes('learn') || promptText.toLowerCase().includes('explain')) &&
+                    actionData.learningCard &&
+                    actionData.learningCard.title &&
+                    actionData.learningCard.summary
+                  ) {
+                    learningCard = {
+                      id: `learn-${Date.now()}`,
+                      ...actionData.learningCard,
+                    };
+                  }
 
-                    if (actionData.bom && actionData.bom.items && actionData.bom.items.length > 0) {
-                      bomData = {
-                        id: `bom-${Date.now()}`,
-                        ...actionData.bom,
-                      };
-                    }
+                  if (actionData.bom && actionData.bom.items && actionData.bom.items.length > 0) {
+                    bomData = {
+                      id: `bom-${Date.now()}`,
+                      ...actionData.bom,
+                    };
                   }
                 }
 
@@ -312,7 +367,8 @@ export const useAIStore = create<AIStoreState>()(
                   promptText.toLowerCase().includes('make') ||
                   promptText.toLowerCase().includes('fix') ||
                   promptText.toLowerCase().includes('counter') ||
-                  promptText.toLowerCase().includes('sensor');
+                  promptText.toLowerCase().includes('sensor') ||
+                  promptText.toLowerCase().includes('led');
 
                 if (!codeProposal && isActionQuery) {
                   const extractedCode = extractFirmwareCode(fullText);

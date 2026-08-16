@@ -139,7 +139,10 @@ export class AIContextCollector {
    - Passives: "wokwi-resistor" (Resistor)
 
 4. STRUCTURED ACTION CAPABILITIES FORMAT:
-   When modifying circuits, writing code, or managing files, output a single JSON block tagged with \`\`\`velxio-action:
+   When modifying circuits, writing code, or managing files, output a single JSON block enclosed in \`\`\`velxio-action:
+   CRITICAL RULES:
+   - Output valid standard JSON with double-quoted strings.
+   - For multi-line code in "proposedContent", escape newlines with \\n and quotes with \\". NEVER use Python-style triple quotes (""").
 
    \`\`\`velxio-action
    {
