@@ -269,7 +269,44 @@ export class PinAllocator {
           color: '#06b6d4', // Cyan
         });
         registry.assign(compId, 'SIG', analogPin, 'analog', `${compId.toUpperCase()}_PIN`);
-      } else if (profile.id === 'wokwi-ssd1306') {
+      } else if (profile.id === 'wokwi-pushbutton') {
+        const btnPin = this.allocateDigitalPin('2');
+        wiresToAdd.push({
+          fromPart: 'board',
+          fromPin: btnPin,
+          toPart: compId,
+          toPin: '1.l',
+          color: '#3b82f6',
+        });
+        wiresToAdd.push({
+          fromPart: 'board',
+          fromPin: boardGnd,
+          toPart: compId,
+          toPin: '2.r',
+          color: '#1f2937',
+        });
+        registry.assign(compId, '1.l', btnPin, 'digital', `${compId.toUpperCase()}_PIN`);
+      } else if (profile.id === 'wokwi-relay-module') {
+        const relayPin = this.allocateDigitalPin('8');
+        wiresToAdd.push({
+          fromPart: 'board',
+          fromPin: relayPin,
+          toPart: compId,
+          toPin: 'IN',
+          color: '#f59e0b',
+        });
+        registry.assign(compId, 'IN', relayPin, 'digital', `${compId.toUpperCase()}_PIN`);
+      } else if (profile.id === 'wokwi-ds18b20') {
+        const dqPin = this.allocateDigitalPin('4');
+        wiresToAdd.push({
+          fromPart: 'board',
+          fromPin: dqPin,
+          toPart: compId,
+          toPin: 'DQ',
+          color: '#10b981',
+        });
+        registry.assign(compId, 'DQ', dqPin, 'digital', `${compId.toUpperCase()}_PIN`);
+      } else if (['wokwi-ssd1306', 'wokwi-mpu6050', 'wokwi-bmp280', 'wokwi-ds1307', 'wokwi-pcf8574'].includes(profile.id)) {
         const { sda, scl } = this.getI2CPins();
         wiresToAdd.push({
           fromPart: 'board',
