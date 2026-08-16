@@ -1097,6 +1097,196 @@ Instantly restores the exact state of files, canvas components, wires, and board
 - **Parameters**: None `()`
 - **Return Value**: `void`
 
+---
+
+## Question 6: Error Loop Analysis
+
+**Describe the exact failure.**
+
+**Show:**
+- User prompt
+- AI response
+- Compiler output
+- Simulation output
+- Error message
+
+*Provide one complete example.*
+
+---
+
+## Answer 6
+
+### 1. Root Cause Breakdown of the Failure Loop
+
+The error loop was caused by **a chain of five interrelated architectural gaps** across the AI parser, store mutations, and simulation solver:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                 THE 5-STAGE ERROR CASCADE                                       │
+├─────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ 1. Malformed Action Output:                                                                     │
+│    LLM emitted Python-style triple quotes (`"""`) inside `"proposedContent"` and omitted        │
+│    the markdown fence, outputting bare `velxio-action\n{ ... }`.                                │
+│                                                                                                 │
+│ 2. Parser Rejection & Raw JSON Dump:                                                            │
+│    `JSON.parse()` crashed on the unescaped newlines. The parser discarded the block, dumping    │
+│    the raw JSON into the chat stream instead of calling tools.                                  │
+│                                                                                                 │
+│ 3. Workspace Left Empty:                                                                        │
+│    `sketch.ino` was never created, `libraries.txt` was missing `LiquidCrystal.h`, and no        │
+│    components or wires were placed on the canvas.                                               │
+│                                                                                                 │
+│ 4. Compiler Build Failure:                                                                      │
+│    `arduino-cli` failed immediately with `fatal error: LiquidCrystal.h: No such file`.          │
+│                                                                                                 │
+│ 5. Canvas Crash (Blank Screen):                                                                 │
+│    Mounting simulator checked undefined `.properties.pin` on incomplete component instances,    │
+│    and SPICE `isBurnoutResistor` called `.startsWith()` on `undefined`, crashing React DOM.     │
+└─────────────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 2. Complete Step-by-Step Failure Example
+
+#### Step 1: The User Prompt
+```text
+Build a visitor counter using an Arduino Uno, an infrared sensor (PIR), and a 16x2 LCD display.
+Make sure the AI executes all actions directly: create sketch.ino, import required libraries,
+add components to canvas, wire the proper circuit, check the serial monitor, and compile.
+```
+
+---
+
+#### Step 2: The Malformed AI Response (Before Fix)
+Instead of executing tools or outputting standard JSON, the model streamed raw text containing Python-style triple quotes (`"""`):
+
+```text
+velxio-action
+{
+  "reasoning": "The LED will be connected to a digital pin on the Arduino Uno, and a series resistor will be used to limit the current flowing through the LED.",
+  "boardKind": "arduino-uno",
+  "steps": [
+    { "id": "1", "title": "Place LED and Resistor", "status": "completed" },
+    { "id": "2", "title": "Connect LED and Resistor to Arduino Uno", "status": "completed" },
+    { "id": "3", "title": "Write LED Blink Firmware", "status": "completed" }
+  ],
+  "circuit": {
+    "title": "LED Blink Circuit",
+    "description": "LED connected to digital pin 13 with a series resistor",
+    "componentsToAdd": [
+      { "id": "led1", "type": "wokwi-led" },
+      { "id": "res1", "type": "wokwi-resistor", "value": "220" }
+    ],
+    "wiresToAdd": [
+      { "fromPart": "board", "fromPin": "5V", "toPart": "res1", "toPin": "1", "color": "#ef4444" },
+      { "fromPart": "res1", "toPart": "led1", "toPin": "A", "color": "#10b981" },
+      { "fromPart": "led1", "toPart": "board", "toPin": "GND", "color": "#1f2937" },
+      { "fromPart": "board", "fromPin": "13", "toPart": "res1", "toPin": "2", "color": "#3b82f6" }
+    ]
+  },
+  "code": {
+    "fileName": "sketch.ino",
+    "summary": "Blinks an LED connected to digital pin 13",
+    "proposedContent": """
+      #include <LiquidCrystal.h>
+      LiquidCrystal lcd(12, 11, 5, 4, 3, 2);
+      const int pirPin = 7;
+      int count = 0;
+
+      void setup() {
+        lcd.begin(16, 2);
+        pinMode(pirPin, INPUT);
+        lcd.print("Visitors: 0");
+      }
+
+      void loop() {
+        if (digitalRead(pirPin) == HIGH) {
+          count++;
+          lcd.setCursor(10, 0);
+          lcd.print(count);
+          delay(500);
+        }
+      }
+    """
+  }
+}
+```
+
+---
+
+#### Step 3: Compiler Output (`CompilationConsole.tsx` / `arduino-cli`)
+Because the file was not written and `libraries.txt` was not populated, the compilation failed:
+
+```text
+Compiling sketch with arduino-cli...
+Board: Arduino Uno (arduino:avr:uno)
+
+/tmp/arduino-sketch-D3F82A/sketch.ino:1:10: fatal error: LiquidCrystal.h: No such file or directory
+ #include <LiquidCrystal.h>
+          ^~~~~~~~~~~~~~~~~
+compilation terminated.
+
+Error: exit status 1
+Compilation failed: 1 error(s) found.
+```
+
+---
+
+#### Step 4: Simulation Output & Solver Crash (`CircuitSimulationService.ts`)
+When the solver attempted to evaluate the unplaced/incomplete components on the canvas:
+
+```text
+[circuit-sim] solve failed: TypeError: Cannot read properties of undefined (reading 'startsWith')
+    at isBurnoutResistor (runtimeBurnout.ts:42:82)
+    at componentStress (runtimeBurnout.ts:71:7)
+    at check (runtimeBurnout.ts:152:20)
+    at runtimeBurnout.ts:187:7
+    at vanilla.mjs:9:39
+    at Set.forEach (<anonymous>)
+    at setState (vanilla.mjs:9:17)
+    at Object.setSolveResult (useElectricalStore.ts:68:5)
+    at CircuitSimulationService.publishFromLastResult (CircuitSimulationService.ts:403:26)
+
+[pinPositionCalculator] Component uno not found in DOM
+[circuit-sim] Simulation halted: Netlist contains 0 active nodes.
+```
+
+---
+
+#### Step 5: Browser Console Error Messages (React Hydration & DOM Crash)
+The React rendering tree collapsed, causing the UI to go completely blank:
+
+```text
+EditorPage.tsx:557 Uncaught TypeError: toggleDock is not a function
+    at onClick (EditorPage.tsx:557:28)
+    at executeDispatch (react-dom-client.development.js:19116:9)
+
+SimulatorCanvas.tsx:2542 Metadata not found for component: undefined
+
+SimulatorCanvas.tsx:1310 Uncaught TypeError: Cannot read properties of undefined (reading 'pin')
+    at SimulatorCanvas.tsx:1310:32
+    at Array.forEach (<anonymous>)
+    at SimulatorCanvas.tsx:1308:16
+    at commitHookEffectListMount (react-dom-client.development.js:13249:29)
+
+react-dom-client.development.js:9362 An error occurred in the <SimulatorCanvas> component.
+Consider adding an error boundary to your tree to customize error handling behavior.
+```
+
+---
+
+### 3. How the Error Cascade Was Resolved
+
+| Failure Point | Architectural Fix Applied | File Fixed |
+| :--- | :--- | :--- |
+| **Python `"""` Quotes & Broken Fences** | Added `extractVelxioAction` with regex pre-sanitizer to auto-convert `"""` to valid JSON strings and strip raw JSON from chat. | [`useAIStore.ts`](file:///d:/NEW/VelxioAI/frontend/src/ai/useAIStore.ts) |
+| **Missing Tools Execution** | Automatically routed parsed proposals into `AgentToolEngine.applyCircuit()`, `AgentToolEngine.writeFile()`, and `AgentToolEngine.installLibraries()`. | [`AgentToolEngine.ts`](file:///d:/NEW/VelxioAI/frontend/src/ai/AgentToolEngine.ts) |
+| **Missing AI Dock Button Function** | Added `toggleDock: (open?: boolean) => void` to `AIStoreState` and implemented toggle logic. | [`useAIStore.ts`](file:///d:/NEW/VelxioAI/frontend/src/ai/useAIStore.ts) |
+| **Blank Canvas (`.pin` crash)** | Added defensive null-safe checks: `if (component?.properties?.pin !== undefined)` before accessing pins. | [`SimulatorCanvas.tsx`](file:///d:/NEW/VelxioAI/frontend/src/components/simulator/SimulatorCanvas.tsx) |
+| **SPICE Solver Crash (`.startsWith` crash)** | Added `typeof metadataId === 'string'` guards in `isBurnoutResistor` and `skipCanonicalization`. | [`runtimeBurnout.ts`](file:///d:/NEW/VelxioAI/frontend/src/simulation/parts/runtimeBurnout.ts), [`NetlistBuilder.ts`](file:///d:/NEW/VelxioAI/frontend/src/simulation/spice/NetlistBuilder.ts) |
+
+
 
 
 
