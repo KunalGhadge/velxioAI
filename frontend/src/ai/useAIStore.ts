@@ -13,6 +13,7 @@ import { AIContextCollector } from './AIContextCollector';
 import { AgentToolEngine } from './AgentToolEngine';
 import { AutoHealingEngine } from './healing/AutoHealingEngine';
 import { ProjectArchitectureEngine } from './architecture/ProjectArchitectureEngine';
+import { IntentClassifier } from './intent/IntentClassifier';
 import { useSimulatorStore } from '../store/useSimulatorStore';
 import { useEditorStore } from '../store/useEditorStore';
 import type {
@@ -258,6 +259,10 @@ export const useAIStore = create<AIStoreState>()(
         }
 
         // 1. Stash Workspace Snapshot for 1-Click Rollback
+        // 1. Deterministic Intent Classification
+        const intentResult = IntentClassifier.classify(promptText);
+        console.log(`[AI MODE] ${intentResult.intent} (Confidence: ${intentResult.confidence}, Reasons: ${intentResult.reasons.join(', ')})`);
+
         const simState = useSimulatorStore.getState();
         const editorState = useEditorStore.getState();
         const checkpoint = {
@@ -271,6 +276,7 @@ export const useAIStore = create<AIStoreState>()(
           id: `user-${Date.now()}`,
           role: 'user',
           content: promptText.trim(),
+          intent: intentResult.intent,
           timestamp: Date.now(),
         };
 
@@ -328,8 +334,8 @@ export const useAIStore = create<AIStoreState>()(
                     }));
                   }
 
-                  // Board switch
-                  if (actionData.boardKind) {
+                  // Board switch (only in BUILD mode)
+                  if (actionData.boardKind && intentResult.intent === 'BUILD') {
                     AgentToolEngine.setBoard(actionData.boardKind);
                   }
 
@@ -367,9 +373,9 @@ export const useAIStore = create<AIStoreState>()(
                     };
                   }
 
-                  // Learning Card (if requested)
+                  // Learning Card (if requested or in EXPLAIN mode)
                   if (
-                    (state.settings.explainMode || promptText.toLowerCase().includes('learn') || promptText.toLowerCase().includes('explain')) &&
+                    (state.settings.explainMode || intentResult.intent === 'EXPLAIN' || promptText.toLowerCase().includes('learn') || promptText.toLowerCase().includes('explain')) &&
                     actionData.learningCard &&
                     actionData.learningCard.title &&
                     actionData.learningCard.summary
@@ -380,7 +386,7 @@ export const useAIStore = create<AIStoreState>()(
                     };
                   }
 
-                  if (actionData.bom && actionData.bom.items && actionData.bom.items.length > 0) {
+                  if (actionData.bom && actionData.bom.items && actionData.bom.items.length > 0 && intentResult.intent === 'BUILD') {
                     bomData = {
                       id: `bom-${Date.now()}`,
                       ...actionData.bom,
@@ -388,18 +394,8 @@ export const useAIStore = create<AIStoreState>()(
                   }
                 }
 
-                // Autonomous Architecture Synthesis for Natural Language Build Requests
-                if (
-                  !circuitProposal &&
-                  (promptText.toLowerCase().includes('make') ||
-                    promptText.toLowerCase().includes('build') ||
-                    promptText.toLowerCase().includes('create') ||
-                    promptText.toLowerCase().includes('add') ||
-                    promptText.toLowerCase().includes('connect') ||
-                    promptText.toLowerCase().includes('alarm') ||
-                    promptText.toLowerCase().includes('counter') ||
-                    promptText.toLowerCase().includes('traffic'))
-                ) {
+                // Autonomous Architecture Synthesis: EXCLUSIVELY FOR BUILD MODE
+                if (!circuitProposal && intentResult.intent === 'BUILD') {
                   const arch = ProjectArchitectureEngine.planProject(promptText);
                   if (arch.subsystems.length > 0) {
                     const allComps: Array<{ id: string; type: string }> = [];
@@ -426,18 +422,25 @@ export const useAIStore = create<AIStoreState>()(
                   }
                 }
 
-                // Execute Agent Actions deterministically
-                if (circuitProposal) {
-                  get().applyCircuitProposal(circuitProposal);
-                }
-                if (codeProposal) {
-                  get().applyCodeProposal(codeProposal);
+                // BUILD-ONLY Execution Gate: Strictly suppress automatic mutations in DEBUG, EXPLAIN, and CHAT modes
+                if (intentResult.intent === 'BUILD') {
+                  if (circuitProposal) {
+                    get().applyCircuitProposal(circuitProposal);
+                  }
+                  if (codeProposal) {
+                    get().applyCodeProposal(codeProposal);
+                  }
+                } else {
+                  // Non-BUILD modes remain 100% read-only
+                  if (circuitProposal) circuitProposal.applied = false;
+                  if (codeProposal) codeProposal.applied = false;
                 }
 
                 const assistantMsg: AIMessage = {
                   id: `assistant-${Date.now()}`,
                   role: 'assistant',
                   content: cleanContent,
+                  intent: intentResult.intent,
                   reasoning: reasoningText,
                   steps,
                   circuitProposal,

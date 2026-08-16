@@ -139,6 +139,7 @@ export interface AIMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp: number;
+  intent?: 'BUILD' | 'DEBUG' | 'EXPLAIN' | 'CHAT';
   reasoning?: string; // Collapsible model thought block
   isStreaming?: boolean;
   steps?: ActionStep[];

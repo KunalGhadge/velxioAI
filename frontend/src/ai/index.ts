@@ -10,6 +10,9 @@
  * - Simulation Scenario Generation & Automated State Assertions
  */
 
+// Intent Classification & Execution Gates
+export * from './intent/IntentClassifier';
+
 // Architecture Planning
 export * from './architecture/ProjectArchitectureEngine';
 export * from './architecture/SubsystemPlanner';

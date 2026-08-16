@@ -270,18 +270,17 @@ export class CircuitValidator {
       }
     }
 
-    // 4. Validate Complete Connectivity (Unconnected Inputs & Unpowered Sensors)
+    // 4. Electrical Connectivity, Power Verification & Orphan Component Rules
     if (
-      proposal.wiresToAdd &&
-      Array.isArray(proposal.wiresToAdd) &&
-      proposal.wiresToAdd.length > 0 &&
       proposal.componentsToAdd &&
-      Array.isArray(proposal.componentsToAdd)
+      Array.isArray(proposal.componentsToAdd) &&
+      proposal.componentsToAdd.length > 0
     ) {
       // Map of componentId -> Set of uppercase connected pin names
       const wiredPinsByComponent = new Map<string, Set<string>>();
+      const wires = proposal.wiresToAdd && Array.isArray(proposal.wiresToAdd) ? proposal.wiresToAdd : [];
 
-      for (const wire of proposal.wiresToAdd) {
+      for (const wire of wires) {
         const fromPart = wire.fromPart || 'board';
         const toPart = wire.toPart;
         const fromPin = (wire.fromPin || '').toUpperCase();
@@ -302,7 +301,20 @@ export class CircuitValidator {
 
         if (!profile) continue;
 
-        // 4a. Check Unpowered Sensors / Active ICs
+        // 4a. Check for Orphan Components with 0 Total Connections
+        if (connectedPins.size === 0) {
+          const msg = `ORPHAN COMPONENT: Component "${compId}" (${profile.name}) has zero wire connections.`;
+          errors.push(msg);
+          issues.push({
+            severity: 'error',
+            code: 'ORPHAN_COMPONENT',
+            message: msg,
+            componentId: compId,
+          });
+          continue;
+        }
+
+        // 4b. Check Unpowered Sensors / Active ICs
         if (profile.powerPins.vcc) {
           const vccPin = profile.powerPins.vcc.toUpperCase();
           if (!connectedPins.has(vccPin)) {

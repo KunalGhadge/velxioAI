@@ -13,7 +13,8 @@ import { useCompileLogsStore } from '../store/useCompileLogsStore';
 import { useElectricalStore } from '../store/useElectricalStore';
 import { BOARD_KIND_LABELS, BOARD_KIND_FQBN } from '../types/board';
 import { ConflictWatchdog } from './tools/conflictWatchdog';
-import { COMPONENT_PIN_DEFINITIONS, BOARD_PIN_DEFINITIONS } from './tools/CircuitValidator';
+import { CircuitValidator, COMPONENT_PIN_DEFINITIONS, BOARD_PIN_DEFINITIONS } from './tools/CircuitValidator';
+import { PinAssignmentRegistry } from './hardware/PinAssignmentRegistry';
 import type { HardwareContextSnapshot, AISettings } from './types';
 
 export class AIContextCollector {
@@ -72,6 +73,25 @@ export class AIContextCollector {
       const activeCode = editorState.files.find((f) => f.id === editorState.activeFileId)?.content || '';
       const conflicts = ConflictWatchdog.analyze(activeCode, simState.wires || [], boardKind);
       circuitWarnings = conflicts.map((c) => `[${c.severity.toUpperCase()}] ${c.title}: ${c.description}`);
+
+      // Run live CircuitValidator
+      const validationReport = CircuitValidator.validate(
+        {
+          boardKind: boardKind as any,
+          componentsToAdd: components as any,
+          wiresToAdd: (simState.wires || []).map((w) => ({
+            fromPart: w.start.componentId,
+            fromPin: w.start.pinName,
+            toPart: w.end.componentId,
+            toPin: w.end.pinName,
+          })),
+        },
+        boardKind as any
+      );
+
+      if (!validationReport.valid) {
+        validationReport.errors.forEach((err) => circuitWarnings.push(`[VALIDATION ERROR] ${err}`));
+      }
     } catch {
       circuitWarnings = [];
     }
@@ -88,6 +108,13 @@ export class AIContextCollector {
       } catch {}
     }
 
+    // 9. Authoritative Pin Assignments
+    const pinAssignments = PinAssignmentRegistry.getInstance().getAllAssignments();
+
+    // 10. Simulation Status
+    const isSimulationRunning = (simState as any).simulationRunning ?? (simState as any).isRunning ?? false;
+    const isSimulationPaused = (simState as any).simulationPaused ?? (simState as any).isPaused ?? false;
+
     return {
       activeBoard: {
         kind: boardKind,
@@ -101,6 +128,9 @@ export class AIContextCollector {
       circuitWarnings,
       spiceNodeVoltages,
       serialOutput,
+      pinAssignments,
+      isSimulationRunning,
+      isSimulationPaused,
     } as any;
   }
 
@@ -112,6 +142,9 @@ export class AIContextCollector {
     const board = snapshot.activeBoard;
     const activeFile = snapshot.files.find((f: any) => f.isActive) || snapshot.files[0];
     const serialSnippet = (snapshot as any).serialOutput || '';
+    const pinAssignments = (snapshot as any).pinAssignments || [];
+    const isSimulationRunning = (snapshot as any).isSimulationRunning;
+    const isSimulationPaused = (snapshot as any).isSimulationPaused;
 
     const boardKey = (board.kind || 'arduino-uno').toLowerCase();
     const boardPinList = BOARD_PIN_DEFINITIONS[boardKey] || BOARD_PIN_DEFINITIONS['arduino-uno'];
@@ -127,44 +160,51 @@ export class AIContextCollector {
 1. INTENT RECOGNITION (CHAT vs. ACTION):
    - **GREETINGS & CASUAL CHAT** (e.g. "hi", "hello", "who are you", "what can you do"): Reply in brief, friendly markdown. DO NOT output an action block, do not touch files, do not touch the circuit.
    - **THEORETICAL & CONCEPTUAL QUESTIONS** (e.g. "explain I2C vs SPI", "what does pinMode do?"): Provide a concise, clear technical explanation in markdown. Only attach a "learningCard" if the user explicitly asked to learn/explain a concept or if explain mode is active.
-   - **BUILD / EDIT / CODE / SIMULATE REQUESTS** (e.g. "make a visitor counter", "add a buzzer on pin 8", "change blink rate to 500ms", "fix the compiler error", "run simulation"): You MUST formulate the exact structured action in a \`\`\`velxio-action block. The IDE will automatically execute your plan (placing parts, connecting wires, writing sketch.ino, installing libraries, and starting simulation).
+   - **DEBUG & DIAGNOSTIC INQUIRIES** (e.g. "Why wasn't the LED blinking?", "Why is the sensor reading 0?", "What is wrong with my circuit?"): Inspect the CURRENT WORKSPACE CONTEXT below (placed parts, wires, firmware, and pin assignments). Provide an accurate in-simulator diagnosis. DO NOT emit an action block unless the user explicitly commands a fix or build.
+   - **BUILD / EDIT / CODE / SIMULATE REQUESTS** (e.g. "make a visitor counter", "add a buzzer on pin 8", "change blink rate to 500ms", "fix the compiler error", "run simulation"): You MUST formulate the exact structured action in a \`\`\`velxio-action block.
 
-2. DETERMINISTIC HARDWARE PINNING:
+2. 🔬 DIGITAL SIMULATOR & DIAGNOSTIC DIRECTIVE:
+   THIS IS A 100% PURE DIGITAL HARDWARE EMULATOR / SIMULATOR.
+   NEVER SUGGEST REAL-WORLD PHYSICAL DEFECTS:
+   - DO NOT suggest broken/burned-out LEDs, damaged ICs, or dead sensors.
+   - DO NOT suggest loose jumper wires, bad breadboard rails, or poor contact.
+   - DO NOT suggest USB power supply issues or faulty cables.
+   - DO NOT suggest physical button debounce degradation.
+
+   YOU MUST DIAGNOSE DIGITAL HARDWARE & FIRMWARE CAUSES ONLY:
+   1. FIRMWARE PIN MISMATCH: Does the pin #define in sketch.ino match the physical wire on the MCU board?
+   2. PIN MODE: Is pinMode(PIN, OUTPUT) called for actuators/LEDs or pinMode(PIN, INPUT/INPUT_PULLUP) for sensors?
+   3. WIRING & NETS: Check Circuit Warnings, unpowered sensors, missing GND returns, or floating pins.
+   4. TIMING & LOGIC: Check delay() timing, blocking while loops, inverted active-low/active-high logic.
+   5. SIMULATOR STATE: Check if simulation is running (${isSimulationRunning ? 'ACTIVE' : 'STOPPED'}) or paused (${isSimulationPaused ? 'PAUSED' : 'NOT PAUSED'}).
+
+3. DETERMINISTIC HARDWARE PINNING:
    - Target Board: "${board.description}" (kind: "${board.kind}", FQBN: "${board.fqbn}").
    - Available Physical Pins on "${board.description}": [${boardPinList.join(', ')}].
    - NEVER invent phantom pins. You MUST strictly use physical pins listed above.
    - Always connect digital sensors to digital pins, analog sensors to analog pins (A0-A5), and PWM devices (servos, buzzers) to hardware PWM pins.
    - LEDs MUST connect through a 220Ω resistor to prevent overcurrent.
 
-3. HARDWARE COMPONENT PIN DICTIONARY (USE EXACT COMPONENT TYPES AND EXACT PIN NAMES):
+4. HARDWARE COMPONENT PIN DICTIONARY (USE EXACT COMPONENT TYPES AND EXACT PIN NAMES):
 ${pinDictionaryMarkdown}
 
-4. STRUCTURED ACTION CAPABILITIES FORMAT:
+5. STRUCTURED ACTION CAPABILITIES FORMAT (FOR BUILD REQUESTS ONLY):
    When modifying circuits, writing code, or managing files, output a single JSON block enclosed in \`\`\`velxio-action:
-   CRITICAL RULES:
-   - Output valid standard JSON with double-quoted strings.
-   - For multi-line code in "proposedContent", escape newlines with \\n and quotes with \\". NEVER use Python-style triple quotes (""").
-
    \`\`\`velxio-action
    {
      "reasoning": "Technical rationale for component choice and pin connections",
      "boardKind": "arduino-uno",
      "steps": [
-       { "id": "1", "title": "Place IR Sensor & 16x2 LCD Display", "status": "completed" },
-       { "id": "2", "title": "Wire power and signal lines to Arduino Uno", "status": "completed" },
-       { "id": "3", "title": "Write visitor counter firmware in sketch.ino", "status": "completed" }
+       { "id": "1", "title": "Place components", "status": "completed" }
      ],
      "circuit": {
-       "title": "Visitor Counter Circuit",
-       "description": "IR sensor and 16x2 LCD display",
-       "componentsToAdd": [
-         { "id": "pir1", "type": "wokwi-pir-motion-sensor" },
-         { "id": "lcd1", "type": "wokwi-lcd1602" }
-       ]
+       "title": "Circuit Modification",
+       "description": "Short summary",
+       "componentsToAdd": []
      },
      "code": {
        "fileName": "sketch.ino",
-       "summary": "Counts visitors and renders live tally on LCD and Serial",
+       "summary": "Firmware update summary",
        "proposedContent": "// Complete Arduino firmware code here\\n"
      }
    }
@@ -174,11 +214,13 @@ ${pinDictionaryMarkdown}
 CURRENT WORKSPACE CONTEXT
 ════════════════════════════════════════════════════════════════
 - Active Board: ${board.description} (Kind: "${board.kind}")
+- Simulation Status: ${isSimulationRunning ? '🟢 RUNNING' : '⚪ STOPPED'} (Paused: ${isSimulationPaused ? 'YES' : 'NO'})
 - Placed Components: ${snapshot.components.length > 0 ? JSON.stringify(snapshot.components) : 'None (Canvas is empty)'}
 - Current Wires: ${snapshot.wires.length > 0 ? JSON.stringify(snapshot.wires) : 'None'}
+- Authoritative Pin Assignments: ${pinAssignments.length > 0 ? JSON.stringify(pinAssignments) : 'None'}
 - Workspace Files: ${snapshot.files.map((f) => f.name).join(', ')}
 ${activeFile ? `- Active File (${activeFile.name}):\n\`\`\`cpp\n${activeFile.content}\n\`\`\`` : ''}
-${snapshot.circuitWarnings && snapshot.circuitWarnings.length > 0 ? `- Circuit Warnings: ${JSON.stringify(snapshot.circuitWarnings)}` : ''}
+${snapshot.circuitWarnings && snapshot.circuitWarnings.length > 0 ? `- Circuit Warnings & Errors:\n${snapshot.circuitWarnings.join('\n')}` : ''}
 ${snapshot.compileLogs && snapshot.compileLogs.length > 0 ? `- Recent Compiler Logs:\n${snapshot.compileLogs.join('\n')}` : ''}
 ${serialSnippet ? `- Recent Serial Monitor Output:\n${serialSnippet}` : ''}
 `;
