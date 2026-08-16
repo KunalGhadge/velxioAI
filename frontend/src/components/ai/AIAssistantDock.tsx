@@ -5,6 +5,8 @@ import { MentionPopup } from './MentionPopup';
 import { AISettingsModal } from './AISettingsModal';
 import './AIAssistantDock.css';
 
+import { AIProgressTracker } from './AIProgressTracker';
+
 export const AIAssistantDock: React.FC = () => {
   const {
     dockOpen,
@@ -21,6 +23,8 @@ export const AIAssistantDock: React.FC = () => {
     settings,
     checkpointSnapshot,
     rollbackCheckpoint,
+    undoAIAction,
+    redoAIAction,
   } = useAIStore();
 
   const [input, setInput] = useState('');
@@ -148,6 +152,20 @@ export const AIAssistantDock: React.FC = () => {
             <div className="velxio-ai-actions">
               <button
                 className="velxio-ai-btn-icon"
+                onClick={undoAIAction}
+                title="Undo AI Action (Ctrl+Z)"
+              >
+                ↩
+              </button>
+              <button
+                className="velxio-ai-btn-icon"
+                onClick={redoAIAction}
+                title="Redo AI Action (Ctrl+Y)"
+              >
+                ↪
+              </button>
+              <button
+                className="velxio-ai-btn-icon"
                 onClick={handleExportChat}
                 title="Save & Export Chat History (.md)"
                 disabled={messages.length === 0}
@@ -187,6 +205,9 @@ export const AIAssistantDock: React.FC = () => {
               </button>
             </div>
           )}
+
+          {/* Real-time Event-Driven Build Progress Animation */}
+          <AIProgressTracker />
 
           {/* Messages */}
           <div className="velxio-ai-messages" ref={messagesContainerRef}>

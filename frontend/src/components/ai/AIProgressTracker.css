@@ -1,0 +1,123 @@
+.velxio-progress-tracker {
+  background: #1e1e1e;
+  border: 1px solid #007acc;
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin: 10px 0;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  animation: velxioFadeIn 0.2s ease-out;
+}
+
+@keyframes velxioFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.velxio-progress-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #333333;
+}
+
+.velxio-progress-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(0, 122, 204, 0.3);
+  border-top-color: #007acc;
+  border-radius: 50%;
+  animation: velxioSpin 0.7s linear infinite;
+}
+
+@keyframes velxioSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.velxio-progress-headline {
+  font-size: 12px;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.velxio-progress-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.velxio-progress-column {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.velxio-progress-col-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #888888;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 2px;
+}
+
+.velxio-stage-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: #666666;
+  transition: all 0.2s ease;
+}
+
+.velxio-stage-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #444444;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.velxio-stage-item.active {
+  color: #38bdf8;
+  font-weight: 500;
+}
+
+.velxio-stage-item.active .velxio-stage-dot {
+  background: #38bdf8;
+  box-shadow: 0 0 6px rgba(56, 189, 248, 0.8);
+  transform: scale(1.3);
+}
+
+.velxio-stage-item.completed {
+  color: #4ade80;
+}
+
+.velxio-stage-item.completed .velxio-stage-dot {
+  background: #4ade80;
+}
+
+.velxio-stage-item.failed {
+  color: #f87171;
+}
+
+.velxio-stage-item.failed .velxio-stage-dot {
+  background: #f87171;
+}
+
+.velxio-stage-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

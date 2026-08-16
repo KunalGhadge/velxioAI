@@ -49,6 +49,12 @@ export * from './testing/ScenarioRunner';
 export * from './runtime/RuntimeVerifier';
 export * from './runtime/BuildExecutionState';
 
+// Events & Real-Time Bus
+export * from './events/AIEventBus';
+
+// History & Snapshot Manager
+export * from './history/AIHistoryManager';
+
 // Execution Engines & Store
 export * from './AgentToolEngine';
 export * from './AIContextCollector';

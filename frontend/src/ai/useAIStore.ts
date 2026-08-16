@@ -20,6 +20,8 @@ import { AutoRecompileLoop } from './compiler/AutoRecompileLoop';
 import { LibraryResolver } from './compiler/LibraryResolver';
 import { ComponentConstraintValidator } from './requirements/ComponentConstraintValidator';
 import { RequirementExtractor } from './requirements/RequirementExtractor';
+import { AIEventBus } from './events/AIEventBus';
+import { AIHistoryManager } from './history/AIHistoryManager';
 import { useSimulatorStore } from '../store/useSimulatorStore';
 import { useEditorStore } from '../store/useEditorStore';
 import type {
@@ -36,7 +38,7 @@ interface WorkspaceSnapshot {
   components: any[];
   wires: any[];
   files: any[];
-  activeBoard: string;
+  activeBoard?: string;
 }
 
 interface AIStoreState {
@@ -63,6 +65,9 @@ interface AIStoreState {
   setApiKey: (provider: any, key: string) => void;
   sendMessage: (promptText: string, options?: { isAutoRepair?: boolean }) => Promise<void>;
   repairWithAI: () => Promise<void>;
+  undoAIAction: () => boolean;
+  redoAIAction: () => boolean;
+  revertToOriginal: () => boolean;
   clearMessages: () => void;
   applyCircuitProposal: (proposal: CircuitProposal) => void;
   applyCodeProposal: (proposal: CodeProposal) => void;
@@ -439,6 +444,8 @@ export const useAIStore = create<AIStoreState>()(
                     { id: '4', title: '⚙ Verifying Runtime Execution...', status: 'pending' },
                   ];
 
+                  AIEventBus.getInstance().publish('CIRCUIT_GENERATION_STARTED', { prompt: promptText });
+
                   // 1. Synthesize Single Source of Truth Specification
                   const spec = ProjectSpecificationEngine.synthesizeSpecification(
                     promptText,
@@ -456,13 +463,19 @@ export const useAIStore = create<AIStoreState>()(
                   };
 
                   get().applyCircuitProposal(circuitProposal);
+                  AIEventBus.getInstance().publish('COMPONENT_ADDED', { count: spec.componentsToAdd.length });
+                  AIEventBus.getInstance().publish('WIRE_ADDED', { count: spec.generatedNetlist.length });
+                  AIEventBus.getInstance().publish('CIRCUIT_GENERATION_COMPLETED');
+
                   buildSteps[0].title = '✓ Circuit created & verified';
                   buildSteps[0].status = 'completed';
                   buildSteps[0].detail = `${spec.componentsToAdd.length} components, ${spec.generatedNetlist.length} wires`;
 
                   // 2. Deterministically Install Required Libraries
+                  AIEventBus.getInstance().publish('CODE_GENERATION_STARTED');
                   if (spec.generatedLibraries.length > 0) {
                     AgentToolEngine.installLibraries(spec.generatedLibraries);
+                    AIEventBus.getInstance().publish('LIBRARY_INSTALLED', { libraries: spec.generatedLibraries });
                   }
 
                   // 3. Apply Canonical Firmware Synchronized with Pins & Libraries
@@ -477,14 +490,18 @@ export const useAIStore = create<AIStoreState>()(
                   };
 
                   get().applyCodeProposal(codeProposal);
+                  AIEventBus.getInstance().publish('CODE_GENERATION_COMPLETED');
+
                   buildSteps[1].title = '✓ Firmware & libraries synchronized';
                   buildSteps[1].status = 'completed';
                   buildSteps[1].detail = `Installed [${spec.generatedLibraries.join(', ')}]`;
 
                   // 4. Auto-start simulation & compile
                   buildSteps[2].status = 'in_progress';
+                  AIEventBus.getInstance().publish('COMPILATION_STARTED');
                   const simStartResult = AgentToolEngine.startSimulation();
                   if (simStartResult.success) {
+                    AIEventBus.getInstance().publish('SIMULATION_STARTED');
                     buildSteps[2].title = '✓ Simulation started';
                     buildSteps[2].status = 'completed';
                     buildSteps[2].detail = 'Virtual MCU CPU running';
@@ -493,10 +510,13 @@ export const useAIStore = create<AIStoreState>()(
                     // 5. Run live runtime verification
                     RuntimeVerifier.verify(promptText, 1200).then((verifyResult) => {
                       if (verifyResult.success) {
+                        AIEventBus.getInstance().publish('RUNTIME_VERIFIED', verifyResult);
+                        AIEventBus.getInstance().publish('AI_BUILD_COMPLETED');
                         buildSteps[3].title = '✓ Runtime verified';
                         buildSteps[3].status = 'completed';
                         buildSteps[3].detail = verifyResult.reason || 'Hardware state stabilized';
                       } else {
+                        AIEventBus.getInstance().publish('AI_BUILD_FAILED', { reason: verifyResult.reason });
                         buildSteps[3].title = '⚠ Runtime check';
                         buildSteps[3].status = 'failed';
                         buildSteps[3].detail = verifyResult.reason || 'Runtime check failed';
@@ -509,6 +529,7 @@ export const useAIStore = create<AIStoreState>()(
                       }));
                     });
                   } else {
+                    AIEventBus.getInstance().publish('AI_BUILD_FAILED', { reason: simStartResult.message });
                     buildSteps[2].title = '⚠ Simulator startup';
                     buildSteps[2].status = 'failed';
                     buildSteps[2].detail = simStartResult.message;
@@ -699,6 +720,18 @@ export const useAIStore = create<AIStoreState>()(
         set((s) => ({
           messages: [...s.messages.filter((m) => m.id !== initialMsg.id), finalMsg],
         }));
+      },
+
+      undoAIAction: () => {
+        return AIHistoryManager.getInstance().undo();
+      },
+
+      redoAIAction: () => {
+        return AIHistoryManager.getInstance().redo();
+      },
+
+      revertToOriginal: () => {
+        return AIHistoryManager.getInstance().revertToOriginal();
       },
 
       rollbackCheckpoint: () => {

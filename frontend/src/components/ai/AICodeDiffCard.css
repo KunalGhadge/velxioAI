@@ -1,19 +1,30 @@
 .velxio-diff-card {
-  background: #252526;
+  background: #1e1e1e;
   border: 1px solid #3c3c3c;
   border-radius: 6px;
-  margin: 10px 0;
+  margin: 8px 0;
   overflow: hidden;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  transition: border-color 0.15s ease;
+}
+
+.velxio-diff-card:hover {
+  border-color: #555555;
 }
 
 .velxio-diff-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 12px;
-  background: #2d2d2d;
-  border-bottom: 1px solid #333333;
+  padding: 6px 10px;
+  background: #252526;
+  cursor: pointer;
+  user-select: none;
+  gap: 8px;
+}
+
+.velxio-diff-header:hover {
+  background: #2a2d2e;
 }
 
 .velxio-diff-title {
@@ -23,45 +34,109 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
+  flex: 1;
+}
+
+.velxio-diff-icon {
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.velxio-diff-filename {
+  color: #58a6ff;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.velxio-diff-badge {
+  background: rgba(255, 255, 255, 0.08);
+  color: #a0a0a0;
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-size: 10px;
+  font-weight: 400;
+  flex-shrink: 0;
+}
+
+.velxio-diff-summary {
+  color: #888888;
+  font-weight: 400;
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .velxio-diff-actions {
   display: flex;
+  align-items: center;
   gap: 6px;
+  flex-shrink: 0;
+}
+
+.velxio-diff-btn-copy,
+.velxio-diff-btn-toggle {
+  background: rgba(255, 255, 255, 0.06);
+  color: #cccccc;
+  border: 1px solid #404040;
+  padding: 3px 7px;
+  border-radius: 4px;
+  font-size: 10.5px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s ease;
+}
+
+.velxio-diff-btn-copy:hover,
+.velxio-diff-btn-toggle:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
 }
 
 .velxio-diff-btn-accept {
-  background: #2ea043;
+  background: #238636;
   color: #ffffff;
-  border: none;
-  padding: 4px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 3px 9px;
   border-radius: 4px;
   font-size: 11px;
   font-weight: 500;
   cursor: pointer;
+  transition: background 0.15s ease;
 }
 
 .velxio-diff-btn-accept:hover {
-  background: #3fb950;
+  background: #2ea043;
 }
 
 .velxio-diff-btn-applied {
-  background: #333333;
+  background: rgba(46, 160, 67, 0.15);
   color: #3fb950;
-  border: 1px solid #2ea043;
-  padding: 4px 10px;
+  border: 1px solid rgba(46, 160, 67, 0.3);
+  padding: 2px 8px;
   border-radius: 4px;
-  font-size: 11px;
+  font-size: 10.5px;
+  font-weight: 500;
 }
 
 .velxio-diff-content {
-  padding: 10px;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  font-size: 12px;
-  line-height: 1.5;
-  max-height: 250px;
+  padding: 8px 12px;
+  background: #181818;
+  border-top: 1px solid #333333;
+  max-height: 380px;
   overflow-y: auto;
-  background: #1e1e1e;
-  white-space: pre-wrap;
+}
+
+.velxio-diff-pre {
+  margin: 0;
+  font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+  font-size: 11.5px;
+  line-height: 1.5;
   color: #d4d4d4;
+  white-space: pre;
+  tab-size: 2;
 }
