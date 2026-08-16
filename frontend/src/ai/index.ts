@@ -13,10 +13,11 @@
 // Intent Classification & Execution Gates
 export * from './intent/IntentClassifier';
 
-// Architecture Planning
+// Architecture Planning & Canonical Specifications
 export * from './architecture/ProjectArchitectureEngine';
 export * from './architecture/SubsystemPlanner';
 export * from './architecture/BoardRecommendationEngine';
+export * from './spec/ProjectSpecification';
 
 // Hardware Planning & Allocators
 export * from './hardware/BoardCapabilityRegistry';

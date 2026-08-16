@@ -13,6 +13,7 @@ import { AIContextCollector } from './AIContextCollector';
 import { AgentToolEngine } from './AgentToolEngine';
 import { AutoHealingEngine } from './healing/AutoHealingEngine';
 import { ProjectArchitectureEngine } from './architecture/ProjectArchitectureEngine';
+import { ProjectSpecificationEngine } from './spec/ProjectSpecification';
 import { IntentClassifier } from './intent/IntentClassifier';
 import { RuntimeVerifier } from './runtime/RuntimeVerifier';
 import { AutoRecompileLoop } from './compiler/AutoRecompileLoop';
@@ -428,62 +429,57 @@ export const useAIStore = create<AIStoreState>()(
                   }
                 }
 
-                // Autonomous Build Execution Pipeline:
-                // 1. Synthesize Circuit -> 2. Resolve Libraries -> 3. Generate Firmware -> 4. Compile & Start Sim -> 5. Verify Runtime
+                // Autonomous Build Execution Pipeline: Single Source of Truth Architecture
+                // 1. Synthesize Specification -> 2. Apply Circuit -> 3. Install Libs -> 4. Apply Synchronized Firmware -> 5. Start Sim & Verify
                 if (intentResult.intent === 'BUILD') {
                   const buildSteps: ActionStep[] = [
-                    { id: '1', title: '⚙ Synthesizing & Validating Circuit...', status: 'in_progress' },
-                    { id: '2', title: '⚙ Resolving Libraries & Firmware...', status: 'pending' },
+                    { id: '1', title: '⚙ Synthesizing & Validating Canonical Circuit...', status: 'in_progress' },
+                    { id: '2', title: '⚙ Resolving Libraries & Synchronizing Firmware...', status: 'pending' },
                     { id: '3', title: '⚙ Compiling & Starting Simulation...', status: 'pending' },
                     { id: '4', title: '⚙ Verifying Runtime Execution...', status: 'pending' },
                   ];
 
-                  // 1. Validate Component Constraints & Apply Circuit
-                  if (circuitProposal) {
-                    // Check if LLM dropped required components; if so, enforce architecture plan
-                    const constraintCheck = ComponentConstraintValidator.validate(circuitProposal.componentsToAdd || [], promptText);
-                    if (!constraintCheck.valid && constraintCheck.missingRequired.length > 0) {
-                      const arch = ProjectArchitectureEngine.planProject(promptText);
-                      const missingComps = arch.subsystems.flatMap((s, sIdx) =>
-                        s.components.map((c, cIdx) => ({
-                          id: `${c.replace(/^(wokwi|velxio)-/, '').replace(/-/g, '_')}_${sIdx + 1}_${cIdx + 1}`,
-                          type: c,
-                        }))
-                      );
-                      circuitProposal.componentsToAdd = Array.from(
-                        new Map([...circuitProposal.componentsToAdd, ...missingComps].map((c) => [c.id, c])).values()
-                      );
-                    }
+                  // 1. Synthesize Single Source of Truth Specification
+                  const spec = ProjectSpecificationEngine.synthesizeSpecification(
+                    promptText,
+                    codeProposal?.proposedContent
+                  );
 
-                    get().applyCircuitProposal(circuitProposal);
-                    buildSteps[0].title = '✓ Circuit created & verified';
-                    buildSteps[0].status = 'completed';
-                    buildSteps[0].detail = circuitProposal.title;
-                  } else {
-                    buildSteps[0].title = '✓ Circuit validated';
-                    buildSteps[0].status = 'completed';
+                  circuitProposal = {
+                    id: `circuit-${Date.now()}`,
+                    title: spec.title,
+                    description: `Deterministic Canonical Hardware Specification (${spec.subsystems.map((s) => s.name).join(', ')})`,
+                    boardKind: spec.board as any,
+                    componentsToAdd: spec.componentsToAdd as any,
+                    wiresToAdd: spec.generatedNetlist as any,
+                    applied: false,
+                  };
+
+                  get().applyCircuitProposal(circuitProposal);
+                  buildSteps[0].title = '✓ Circuit created & verified';
+                  buildSteps[0].status = 'completed';
+                  buildSteps[0].detail = `${spec.componentsToAdd.length} components, ${spec.generatedNetlist.length} wires`;
+
+                  // 2. Deterministically Install Required Libraries
+                  if (spec.generatedLibraries.length > 0) {
+                    AgentToolEngine.installLibraries(spec.generatedLibraries);
                   }
 
-                  // 2. Deterministically Resolve & Install Required Libraries
-                  const activeComps = circuitProposal?.componentsToAdd || [];
-                  const activeWires = circuitProposal?.wiresToAdd || [];
-                  const activeCode = codeProposal?.proposedContent || '';
-                  const requiredLibraries = LibraryResolver.resolveAll(activeComps, activeCode, activeWires);
+                  // 3. Apply Canonical Firmware Synchronized with Pins & Libraries
+                  codeProposal = {
+                    id: `code-${Date.now()}`,
+                    fileId: 'sketch.ino',
+                    fileName: 'sketch.ino',
+                    originalContent: '',
+                    proposedContent: spec.generatedFirmware,
+                    summary: `Canonical firmware synchronized with ${spec.board} pin netlist`,
+                    applied: false,
+                  };
 
-                  if (requiredLibraries.length > 0) {
-                    AgentToolEngine.installLibraries(requiredLibraries);
-                  }
-
-                  // 3. Apply Code Proposal
-                  if (codeProposal) {
-                    get().applyCodeProposal(codeProposal);
-                    buildSteps[1].title = '✓ Firmware & libraries synchronized';
-                    buildSteps[1].status = 'completed';
-                    buildSteps[1].detail = `Installed [${requiredLibraries.join(', ')}]`;
-                  } else {
-                    buildSteps[1].title = '✓ Firmware retained';
-                    buildSteps[1].status = 'completed';
-                  }
+                  get().applyCodeProposal(codeProposal);
+                  buildSteps[1].title = '✓ Firmware & libraries synchronized';
+                  buildSteps[1].status = 'completed';
+                  buildSteps[1].detail = `Installed [${spec.generatedLibraries.join(', ')}]`;
 
                   // 4. Auto-start simulation & compile
                   buildSteps[2].status = 'in_progress';
@@ -625,27 +621,8 @@ export const useAIStore = create<AIStoreState>()(
       applyCodeProposal: (proposal) => {
         AgentToolEngine.writeFile(proposal.fileName || 'sketch.ino', proposal.proposedContent);
 
-        // Auto-detect and install required Arduino libraries
-        const requiredLibs: string[] = [];
-        if (
-          proposal.proposedContent.includes('LiquidCrystal.h') ||
-          proposal.proposedContent.includes('LiquidCrystal_I2C.h')
-        ) {
-          requiredLibs.push('LiquidCrystal');
-        }
-        if (proposal.proposedContent.includes('DHT.h')) {
-          requiredLibs.push('DHT sensor library');
-        }
-        if (proposal.proposedContent.includes('Adafruit_SSD1306.h')) {
-          requiredLibs.push('Adafruit SSD1306', 'Adafruit GFX Library');
-        }
-        if (proposal.proposedContent.includes('Servo.h')) {
-          requiredLibs.push('Servo');
-        }
-        if (proposal.proposedContent.includes('Adafruit_NeoPixel.h')) {
-          requiredLibs.push('Adafruit NeoPixel');
-        }
-
+        // Auto-detect and install required Arduino libraries deterministically
+        const requiredLibs = LibraryResolver.resolveFromCode(proposal.proposedContent);
         if (requiredLibs.length > 0) {
           AgentToolEngine.installLibraries(requiredLibs);
         }
