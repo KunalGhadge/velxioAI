@@ -47,6 +47,8 @@ export const COMPONENT_PIN_DEFINITIONS: Record<string, string[]> = {
   'wokwi-pushbutton': ['1.l', '1.r', '2.l', '2.r', '1', '2'],
   'wokwi-slide-switch': ['1', '2', '3', 'COM'],
   'wokwi-membrane-keypad': ['R1', 'R2', 'R3', 'R4', 'C1', 'C2', 'C3', 'C4'],
+  'wokwi-pcf8574': ['VCC', 'GND', 'SCL', 'SDA', 'P0', 'P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'INT', 'A0', 'A1', 'A2'],
+  'wokwi-ds1307': ['VCC', 'GND', 'SCL', 'SDA', 'SQW', '5V', 'BAT'],
   'wokwi-resistor': ['1', '2'],
 };
 
@@ -226,6 +228,45 @@ export class CircuitValidator {
           warnings.push(`Duplicate wire between ${fromPart}:${fromPin} and ${toPart}:${toPin}.`);
         }
         seenNets.add(netA);
+      }
+    }
+
+    // 3. Detect Duplicate I2C Addresses on the I2C Bus
+    if (proposal.componentsToAdd && Array.isArray(proposal.componentsToAdd)) {
+      const seenI2CAddresses = new Map<number, string>();
+
+      for (const comp of proposal.componentsToAdd) {
+        if (!comp.type) continue;
+        const compId = comp.id || comp.type;
+        const profile = HardwareComponentRegistry.getComponent(comp.type);
+
+        let i2cAddr: number | undefined;
+        if (comp.attrs?.i2cAddress !== undefined) {
+          const raw = comp.attrs.i2cAddress;
+          i2cAddr = typeof raw === 'string' ? parseInt(raw, 16) || parseInt(raw, 10) : Number(raw);
+        } else if (comp.attrs?.address !== undefined) {
+          const raw = comp.attrs.address;
+          i2cAddr = typeof raw === 'string' ? parseInt(raw, 16) || parseInt(raw, 10) : Number(raw);
+        } else if (profile && profile.busType === 'i2c' && profile.i2cDefaultAddress !== undefined) {
+          i2cAddr = profile.i2cDefaultAddress;
+        }
+
+        if (i2cAddr !== undefined && !isNaN(i2cAddr)) {
+          const hex = `0x${i2cAddr.toString(16).toUpperCase()}`;
+          if (seenI2CAddresses.has(i2cAddr)) {
+            const conflictId = seenI2CAddresses.get(i2cAddr);
+            const msg = `Duplicate I2C address ${hex} detected between components "${conflictId}" and "${compId}". I2C address collision will corrupt bus communication.`;
+            errors.push(msg);
+            issues.push({
+              severity: 'error',
+              code: 'DUPLICATE_I2C_ADDRESS',
+              message: msg,
+              componentId: compId,
+            });
+          } else {
+            seenI2CAddresses.set(i2cAddr, compId);
+          }
+        }
       }
     }
 
