@@ -1449,6 +1449,188 @@ void loop() {
 [Velxio] Serial monitor connected at 9600 baud.
 ```
 
+---
+
+## Question 8: Autonomous Self-Healing & Repair Loop
+
+**Explain how the repair loop works.**
+
+**For example:**
+```
+User request
+↓
+AI generation
+↓
+Compile
+↓
+Error detection
+↓
+AI repair
+↓
+Compile again
+```
+
+*Show the complete loop.*
+
+---
+
+## Answer 8
+
+### 1. Architectural Overview of the Auto-Heal System
+
+VelxioAI features a **Real-Time Closed-Loop Self-Healing Diagnostic Engine** capable of detecting, diagnosing, and repairing compilation errors, missing libraries, syntax bugs, and electrical simulation faults without requiring manual user debugging.
+
+```
+                                  AUTONOMOUS REPAIR LOOP
+                                             │
+                           ┌─────────────────▼─────────────────┐
+                           │    1. Initial User Request        │
+                           │   "Build ultrasonic distance      │
+                           │    sensor with buzzer alarm"      │
+                           └─────────────────┬─────────────────┘
+                                             │
+                           ┌─────────────────▼─────────────────┐
+                           │    2. AI Generation & Synthesis   │
+                           │  - Sets board: arduino-uno        │
+                           │  - Places: HC-SR04 & Piezo Buzzer │
+                           │  - Writes: sketch.ino code        │
+                           └─────────────────┬─────────────────┘
+                                             │
+                           ┌─────────────────▼─────────────────┐
+                           │    3. Automated Compilation       │
+                           │     arduino-cli / espidf          │
+                           └─────────────────┬─────────────────┘
+                                             │
+                                   [Compilation Status]
+                                     /             \
+                             [Success]             [Failure / Error]
+                                 │                         │
+            ┌────────────────────▼──────────────┐   ┌──────▼────────────────────────────┐
+            │ Launch Simulation & Serial        │   │ 4. Error Detection & Ingestion    │
+            │ - avr8js / rp2040js / QEMU CPU    │   │ - Parse missing header / syntax   │
+            │ - WASM ngspice analog solver      │   │ - Identify exact file & line #    │
+            │ - Live UART Serial stream         │   │ - Ingest SPICE burnout / faults   │
+            └───────────────────────────────────┘   └──────────────┬────────────────────┘
+                                                                   │
+                                                    ┌──────────────▼────────────────────┐
+                                                    │ 5. Auto-Heal Prompt Dispatch      │
+                                                    │ Ingests:                          │
+                                                    │ - Exact compiler stderr trace     │
+                                                    │ - Failing source code snippet     │
+                                                    │ - Netlist & board pinout state    │
+                                                    └──────────────┬────────────────────┘
+                                                                   │
+                                                    ┌──────────────▼────────────────────┐
+                                                    │ 6. AI Root Cause Analysis & Patch │
+                                                    │ - Generates targeted fix          │
+                                                    │ - Installs missing library in     │
+                                                    │   libraries.txt                   │
+                                                    │ - Patches sketch.ino in Monaco    │
+                                                    │ - Reconnects miswired pins        │
+                                                    └──────────────┬────────────────────┘
+                                                                   │
+                                                    ┌──────────────▼────────────────────┐
+                                                    │ 7. Automated Re-Compilation       │
+                                                    │    (Attempts counter ≤ 3)         │
+                                                    └──────────────┬────────────────────┘
+                                                                   │
+                                                      [Re-evaluate Status]
+                                                       (Loop back to Step 3)
+```
+
+---
+
+### 2. Deep-Dive Step-by-Step Execution Lifecycle
+
+#### Step 1: User Request & Code Synthesis
+The user prompts:
+```text
+Build an ultrasonic parking sensor on Arduino Uno that beeps faster as objects get closer.
+```
+The AI streams a `velxio-action` block:
+- **Board**: `arduino-uno`
+- **Circuit**: Places `wokwi-hc-sr04` (Trig: pin 9, Echo: pin 10) and `wokwi-buzzer` (pin 8).
+- **Code**: Writes initial `sketch.ino` utilizing the `<NewPing.h>` library.
+
+---
+
+#### Step 2: Automated Compilation (`AgentToolEngine.compileProject()`)
+The IDE immediately triggers the backend compilation pipeline. The source files, headers, and library manifests are packaged and transmitted to the `arduino-cli` build worker.
+
+---
+
+#### Step 3: Error Detection & Diagnostic Parsing
+The compilation fails because `NewPing.h` was not pre-installed in `libraries.txt`.
+
+The error stream is captured by `useCompileLogsStore` and parsed by [`CompilationConsole.tsx`](file:///d:/NEW/VelxioAI/frontend/src/components/editor/CompilationConsole.tsx):
+```text
+/tmp/arduino-sketch-89F12B/sketch.ino:2:10: fatal error: NewPing.h: No such file or directory
+ #include <NewPing.h>
+          ^~~~~~~~~~~
+compilation terminated.
+Error: exit status 1
+```
+The parser extracts:
+- **Error Type**: `MISSING_LIBRARY`
+- **Missing Header**: `NewPing.h`
+- **Failing File**: `sketch.ino`
+- **Line Number**: `2`
+
+---
+
+#### Step 4: Autonomous AI Auto-Heal Trigger
+If `settings.autoHealEnabled` is active (or if the user clicks **"Auto-Heal with AI"** in the Compilation Console), the system triggers an autonomous repair cycle:
+
+```typescript
+// CompilationConsole.tsx -> Auto-Heal Dispatch
+const handleAutoHeal = async (errorLog: string) => {
+  const prompt = `COMPILATION ERROR DETECTED in ${activeFileName}:\n\n${errorLog}\n\nPlease analyze the root cause, install any required libraries, fix the code or wiring, and provide the repaired proposal.`;
+  await useAIStore.getState().sendMessage(prompt);
+};
+```
+
+---
+
+#### Step 5: AI Repair & Workspace Mutation
+The AI receives the error trace along with the live workspace context, pinouts, and code. It diagnoses that `NewPing` is missing and outputs an action patch:
+
+```json
+{
+  "reasoning": "The compilation failed because the NewPing library is missing. I have added NewPing to libraries.txt and ensured pin definitions match the HC-SR04 wiring (Trig: 9, Echo: 10).",
+  "code": {
+    "fileName": "sketch.ino",
+    "summary": "Fixed NewPing initialization and added guard delays",
+    "proposedContent": "#include <NewPing.h>\n\n#define TRIGGER_PIN 9\n#define ECHO_PIN 10\n#define MAX_DISTANCE 200\n#define BUZZER_PIN 8\n\nNewPing sonar(TRIGGER_PIN, ECHO_PIN, MAX_DISTANCE);\n\nvoid setup() {\n  pinMode(BUZZER_PIN, OUTPUT);\n  Serial.begin(9600);\n}\n\nvoid loop() {\n  delay(50);\n  unsigned int uS = sonar.ping();\n  int distance = uS / US_ROUNDTRIP_CM;\n  if (distance > 0 && distance < 30) {\n    digitalWrite(BUZZER_PIN, HIGH);\n    delay(distance * 10);\n    digitalWrite(BUZZER_PIN, LOW);\n    delay(distance * 10);\n  }\n}\n"
+  }
+}
+```
+
+The [`AgentToolEngine.applyCodeProposal()`](file:///d:/NEW/VelxioAI/frontend/src/ai/useAIStore.ts#L430) executes automatically:
+1. `AgentToolEngine.writeFile('sketch.ino', repairedCode)` updates the editor in Monaco.
+2. `AgentToolEngine.installLibraries(['NewPing'])` writes `NewPing` into `libraries.txt`.
+
+---
+
+#### Step 6: Re-Compilation & Verification
+`AgentToolEngine.compileProject()` executes a second compilation run:
+```text
+[arduino-cli] Resolving library 'NewPing'... Found in library index.
+[arduino-cli] Compiling sketch.ino...
+[arduino-cli] Sketch uses 1,420 bytes (4%) of program storage space.
+[arduino-cli] Global variables use 18 bytes (0%) of dynamic memory.
+[arduino-cli] ✅ Compilation Successful!
+```
+
+---
+
+#### Step 7: Automated Simulation Launch
+With the build verified with 0 errors:
+1. [`AgentToolEngine.startSimulation()`](file:///d:/NEW/VelxioAI/frontend/src/ai/AgentToolEngine.ts#L320) boots the microcontroller CPU in Web Workers.
+2. The WASM ngspice engine begins solving real analog voltages.
+3. The live Serial Monitor displays live distance telemetry.
+4. The user is presented with a functioning, fully wired, and simulated embedded application.
+
+
 
 
 
