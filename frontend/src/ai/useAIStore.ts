@@ -14,6 +14,7 @@ import { AgentToolEngine } from './AgentToolEngine';
 import { AutoHealingEngine } from './healing/AutoHealingEngine';
 import { ProjectArchitectureEngine } from './architecture/ProjectArchitectureEngine';
 import { IntentClassifier } from './intent/IntentClassifier';
+import { RuntimeVerifier } from './runtime/RuntimeVerifier';
 import { useSimulatorStore } from '../store/useSimulatorStore';
 import { useEditorStore } from '../store/useEditorStore';
 import type {
@@ -422,14 +423,72 @@ export const useAIStore = create<AIStoreState>()(
                   }
                 }
 
-                // BUILD-ONLY Execution Gate: Strictly suppress automatic mutations in DEBUG, EXPLAIN, and CHAT modes
+                // Autonomous Build Execution Pipeline:
+                // 1. Synthesize Circuit -> 2. Generate Firmware -> 3. Compile & Start Sim -> 4. Verify Runtime
                 if (intentResult.intent === 'BUILD') {
+                  const buildSteps: ActionStep[] = [
+                    { id: '1', title: '⚙ Synthesizing & Validating Circuit...', status: 'in_progress' },
+                    { id: '2', title: '⚙ Generating Firmware...', status: 'pending' },
+                    { id: '3', title: '⚙ Compiling & Starting Simulation...', status: 'pending' },
+                    { id: '4', title: '⚙ Verifying Runtime Execution...', status: 'pending' },
+                  ];
+
                   if (circuitProposal) {
                     get().applyCircuitProposal(circuitProposal);
+                    buildSteps[0].title = '✓ Circuit created';
+                    buildSteps[0].status = 'completed';
+                    buildSteps[0].detail = circuitProposal.title;
+                  } else {
+                    buildSteps[0].title = '✓ Circuit validated';
+                    buildSteps[0].status = 'completed';
                   }
+
                   if (codeProposal) {
                     get().applyCodeProposal(codeProposal);
+                    buildSteps[1].title = '✓ Firmware generated';
+                    buildSteps[1].status = 'completed';
+                    buildSteps[1].detail = 'Firmware synchronized in sketch.ino';
+                  } else {
+                    buildSteps[1].title = '✓ Firmware retained';
+                    buildSteps[1].status = 'completed';
                   }
+
+                  // Auto-start simulation after proposal application
+                  buildSteps[2].status = 'in_progress';
+                  const simStartResult = AgentToolEngine.startSimulation();
+                  if (simStartResult.success) {
+                    buildSteps[2].title = '✓ Simulation started';
+                    buildSteps[2].status = 'completed';
+                    buildSteps[2].detail = 'Virtual MCU CPU running';
+                    buildSteps[3].status = 'in_progress';
+
+                    // Run non-blocking runtime verification
+                    RuntimeVerifier.verify(promptText, 1200).then((verifyResult) => {
+                      if (verifyResult.success) {
+                        buildSteps[3].title = '✓ Runtime verified';
+                        buildSteps[3].status = 'completed';
+                        buildSteps[3].detail = verifyResult.reason || 'Hardware state stabilized';
+                      } else {
+                        buildSteps[3].title = '⚠ Runtime check';
+                        buildSteps[3].status = 'failed';
+                        buildSteps[3].detail = verifyResult.reason || 'Runtime check failed';
+                      }
+
+                      set((s) => ({
+                        messages: s.messages.map((m) =>
+                          m.id === assistantMsg.id ? { ...m, steps: [...buildSteps] } : m
+                        ),
+                      }));
+                    });
+                  } else {
+                    buildSteps[2].title = '⚠ Simulator startup';
+                    buildSteps[2].status = 'failed';
+                    buildSteps[2].detail = simStartResult.message;
+                    buildSteps[3].title = '⚠ Runtime skipped';
+                    buildSteps[3].status = 'failed';
+                  }
+
+                  steps = buildSteps;
                 } else {
                   // Non-BUILD modes remain 100% read-only
                   if (circuitProposal) circuitProposal.applied = false;

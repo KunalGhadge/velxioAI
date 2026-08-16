@@ -32,9 +32,11 @@ export * from './firmware/LibraryDependencyManager';
 export * from './tools/CircuitValidator';
 export * from './healing/AutoHealingEngine';
 
-// Simulation Testing
+// Simulation Testing & Runtime Verification
 export * from './testing/SimulationScenarioGenerator';
 export * from './testing/ScenarioRunner';
+export * from './runtime/RuntimeVerifier';
+export * from './runtime/BuildExecutionState';
 
 // Execution Engines & Store
 export * from './AgentToolEngine';

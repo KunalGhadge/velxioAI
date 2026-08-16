@@ -142,4 +142,8 @@ export class PinAssignmentRegistry {
   public clear(): void {
     this.assignments.clear();
   }
+
+  public reset(): void {
+    this.clear();
+  }
 }

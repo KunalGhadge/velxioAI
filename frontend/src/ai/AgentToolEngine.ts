@@ -402,6 +402,16 @@ export class AgentToolEngine {
         runEditorCommand('sim.run');
         return { success: true, message: 'Simulation started' };
       }
+      const sim = useSimulatorStore.getState();
+      const activeBoard = sim.boards.find((b) => b.id === sim.activeBoardId) || sim.boards[0];
+      if (activeBoard && typeof (sim as any).startBoard === 'function') {
+        (sim as any).startBoard(activeBoard.id);
+        return { success: true, message: 'Simulation started via active board runner' };
+      }
+      if (typeof (sim as any).startSimulation === 'function') {
+        (sim as any).startSimulation();
+        return { success: true, message: 'Simulation started via simulator store' };
+      }
       return { success: false, message: 'Simulation runner is not currently ready' };
     } catch (err: any) {
       return { success: false, message: `Failed to start simulation: ${err.message}` };
