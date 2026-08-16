@@ -648,6 +648,13 @@ export class LLMClient {
 
     try {
       if (provider === 'gemini') {
+        if (!keyToTest.startsWith('AIzaSy')) {
+          return {
+            success: false,
+            message: `⚠️ The key starts with "${keyToTest.slice(0, 3)}...", which looks like a Google Cloud OAuth / service token. Google Gemini requires a Google AI Studio API key (starts with "AIzaSy..."). Get your free key at: https://aistudio.google.com/app/apikey`,
+          };
+        }
+
         const testModel = model || 'gemini-2.0-flash';
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${testModel}?key=${keyToTest}`;
         const res = await fetch(url);

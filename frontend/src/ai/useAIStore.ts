@@ -66,7 +66,7 @@ interface AIStoreState {
 const DEFAULT_SETTINGS: AISettings = {
   provider: 'gemini',
   apiKeys: {},
-  selectedModel: 'gemini-2.5-flash',
+  selectedModel: 'gemini-2.0-flash',
   temperature: 0.2,
   autoHealEnabled: true,
   explainMode: false,
