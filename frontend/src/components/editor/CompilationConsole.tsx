@@ -125,8 +125,7 @@ export const CompilationConsole: React.FC<CompilationConsoleProps> = React.memo(
             {errorCount > 0 && (
               <button
                 onClick={() => {
-                  useAIStore.getState().toggleDock(true);
-                  useAIStore.getState().sendMessage('/fix The firmware compilation failed with errors. Please analyze the compiler logs and fix the sketch.');
+                  useAIStore.getState().repairWithAI();
                 }}
                 style={{
                   background: '#007acc',

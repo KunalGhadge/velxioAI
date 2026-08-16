@@ -15,6 +15,10 @@ import { AutoHealingEngine } from './healing/AutoHealingEngine';
 import { ProjectArchitectureEngine } from './architecture/ProjectArchitectureEngine';
 import { IntentClassifier } from './intent/IntentClassifier';
 import { RuntimeVerifier } from './runtime/RuntimeVerifier';
+import { AutoRecompileLoop } from './compiler/AutoRecompileLoop';
+import { LibraryResolver } from './compiler/LibraryResolver';
+import { ComponentConstraintValidator } from './requirements/ComponentConstraintValidator';
+import { RequirementExtractor } from './requirements/RequirementExtractor';
 import { useSimulatorStore } from '../store/useSimulatorStore';
 import { useEditorStore } from '../store/useEditorStore';
 import type {
@@ -57,6 +61,7 @@ interface AIStoreState {
   updateSettings: (partial: Partial<AISettings>) => void;
   setApiKey: (provider: any, key: string) => void;
   sendMessage: (promptText: string, options?: { isAutoRepair?: boolean }) => Promise<void>;
+  repairWithAI: () => Promise<void>;
   clearMessages: () => void;
   applyCircuitProposal: (proposal: CircuitProposal) => void;
   applyCodeProposal: (proposal: CodeProposal) => void;
@@ -424,18 +429,34 @@ export const useAIStore = create<AIStoreState>()(
                 }
 
                 // Autonomous Build Execution Pipeline:
-                // 1. Synthesize Circuit -> 2. Generate Firmware -> 3. Compile & Start Sim -> 4. Verify Runtime
+                // 1. Synthesize Circuit -> 2. Resolve Libraries -> 3. Generate Firmware -> 4. Compile & Start Sim -> 5. Verify Runtime
                 if (intentResult.intent === 'BUILD') {
                   const buildSteps: ActionStep[] = [
                     { id: '1', title: '⚙ Synthesizing & Validating Circuit...', status: 'in_progress' },
-                    { id: '2', title: '⚙ Generating Firmware...', status: 'pending' },
+                    { id: '2', title: '⚙ Resolving Libraries & Firmware...', status: 'pending' },
                     { id: '3', title: '⚙ Compiling & Starting Simulation...', status: 'pending' },
                     { id: '4', title: '⚙ Verifying Runtime Execution...', status: 'pending' },
                   ];
 
+                  // 1. Validate Component Constraints & Apply Circuit
                   if (circuitProposal) {
+                    // Check if LLM dropped required components; if so, enforce architecture plan
+                    const constraintCheck = ComponentConstraintValidator.validate(circuitProposal.componentsToAdd || [], promptText);
+                    if (!constraintCheck.valid && constraintCheck.missingRequired.length > 0) {
+                      const arch = ProjectArchitectureEngine.planProject(promptText);
+                      const missingComps = arch.subsystems.flatMap((s, sIdx) =>
+                        s.components.map((c, cIdx) => ({
+                          id: `${c.replace(/^(wokwi|velxio)-/, '').replace(/-/g, '_')}_${sIdx + 1}_${cIdx + 1}`,
+                          type: c,
+                        }))
+                      );
+                      circuitProposal.componentsToAdd = Array.from(
+                        new Map([...circuitProposal.componentsToAdd, ...missingComps].map((c) => [c.id, c])).values()
+                      );
+                    }
+
                     get().applyCircuitProposal(circuitProposal);
-                    buildSteps[0].title = '✓ Circuit created';
+                    buildSteps[0].title = '✓ Circuit created & verified';
                     buildSteps[0].status = 'completed';
                     buildSteps[0].detail = circuitProposal.title;
                   } else {
@@ -443,17 +464,28 @@ export const useAIStore = create<AIStoreState>()(
                     buildSteps[0].status = 'completed';
                   }
 
+                  // 2. Deterministically Resolve & Install Required Libraries
+                  const activeComps = circuitProposal?.componentsToAdd || [];
+                  const activeWires = circuitProposal?.wiresToAdd || [];
+                  const activeCode = codeProposal?.proposedContent || '';
+                  const requiredLibraries = LibraryResolver.resolveAll(activeComps, activeCode, activeWires);
+
+                  if (requiredLibraries.length > 0) {
+                    AgentToolEngine.installLibraries(requiredLibraries);
+                  }
+
+                  // 3. Apply Code Proposal
                   if (codeProposal) {
                     get().applyCodeProposal(codeProposal);
-                    buildSteps[1].title = '✓ Firmware generated';
+                    buildSteps[1].title = '✓ Firmware & libraries synchronized';
                     buildSteps[1].status = 'completed';
-                    buildSteps[1].detail = 'Firmware synchronized in sketch.ino';
+                    buildSteps[1].detail = `Installed [${requiredLibraries.join(', ')}]`;
                   } else {
                     buildSteps[1].title = '✓ Firmware retained';
                     buildSteps[1].status = 'completed';
                   }
 
-                  // Auto-start simulation after proposal application
+                  // 4. Auto-start simulation & compile
                   buildSteps[2].status = 'in_progress';
                   const simStartResult = AgentToolEngine.startSimulation();
                   if (simStartResult.success) {
@@ -462,7 +494,7 @@ export const useAIStore = create<AIStoreState>()(
                     buildSteps[2].detail = 'Virtual MCU CPU running';
                     buildSteps[3].status = 'in_progress';
 
-                    // Run non-blocking runtime verification
+                    // 5. Run live runtime verification
                     RuntimeVerifier.verify(promptText, 1200).then((verifyResult) => {
                       if (verifyResult.success) {
                         buildSteps[3].title = '✓ Runtime verified';
@@ -634,8 +666,62 @@ export const useAIStore = create<AIStoreState>()(
         AgentToolEngine.stopSimulation();
       },
 
-      beautifyCircuit: () => {
-        AgentToolEngine.beautifyCircuit();
+      repairWithAI: async () => {
+        set({ dockOpen: true });
+        console.log('[AI MODE] REPAIR (Deterministic Self-Healing Auto-Recompile Loop)');
+
+        const initialMsg: AIMessage = {
+          id: `repair-start-${Date.now()}`,
+          role: 'assistant',
+          content: '⚙ **Deterministic Self-Healing In Progress**...\nAnalyzing compiler diagnostics, resolving missing libraries, and synchronizing pin mappings.',
+          timestamp: Date.now(),
+          steps: [
+            { id: '1', title: '⚙ Classifying Compilation Failures...', status: 'in_progress' },
+            { id: '2', title: '⚙ Resolving & Installing Missing Libraries...', status: 'pending' },
+            { id: '3', title: '⚙ Synchronizing Pin Mappings & Headers...', status: 'pending' },
+            { id: '4', title: '⚙ Auto-Recompiling...', status: 'pending' },
+          ],
+        };
+
+        set((s) => ({ messages: [...s.messages, initialMsg] }));
+
+        const repairResult = await AutoRecompileLoop.execute(3);
+
+        const repairSteps: ActionStep[] = [
+          { id: '1', title: '✓ Compilation Failures Classified', status: 'completed' },
+          { id: '2', title: repairResult.success ? '✓ Libraries & Headers Resolved' : '⚠ Library Resolution', status: repairResult.success ? 'completed' : 'failed' },
+          { id: '3', title: repairResult.success ? '✓ Pin Mappings Synchronized' : '⚠ Pin Synchronization', status: repairResult.success ? 'completed' : 'failed' },
+          { id: '4', title: repairResult.success ? '✓ Recompilation Succeeded' : '✗ Recompilation Failed', status: repairResult.success ? 'completed' : 'failed' },
+        ];
+
+        let finalContent = '';
+        if (repairResult.success) {
+          // Start simulation & verify
+          AgentToolEngine.startSimulation();
+          const verifyResult = await RuntimeVerifier.verify();
+
+          finalContent = `✅ **Project Successfully Repaired & Booted** (in ${repairResult.attempts} attempt(s)):\n\n` +
+            (repairResult.repairHistory.length > 0 ? repairResult.repairHistory.map((h) => `- ${h}`).join('\n') + '\n' : '') +
+            `- **Compilation Status**: Clean build (0 errors)\n` +
+            `- **Simulator Status**: Running (Virtual MCU CPU active)\n` +
+            `- **Runtime Verification**: ${verifyResult.reason || 'Hardware stabilized'}`;
+        } else {
+          finalContent = `❌ **Deterministic Auto-Repair Exhausted** (${repairResult.attempts} attempts):\n\n` +
+            `**Remaining Unresolved Errors**:\n` +
+            repairResult.finalErrors.map((e) => `- ${e.file || 'sketch.ino'}:${e.lineNumber || '?'}: ${e.compilerMessage} (${e.suggestedAction || 'Manual fix required'})`).join('\n');
+        }
+
+        const finalMsg: AIMessage = {
+          id: `repair-final-${Date.now()}`,
+          role: 'assistant',
+          content: finalContent,
+          timestamp: Date.now(),
+          steps: repairSteps,
+        };
+
+        set((s) => ({
+          messages: [...s.messages.filter((m) => m.id !== initialMsg.id), finalMsg],
+        }));
       },
 
       rollbackCheckpoint: () => {

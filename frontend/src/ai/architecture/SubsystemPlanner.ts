@@ -45,6 +45,8 @@ export class SubsystemPlanner {
     if (
       text.includes('motion') ||
       text.includes('pir') ||
+      text.includes('ir') ||
+      text.includes('infrared') ||
       text.includes('presence') ||
       text.includes('visitor') ||
       text.includes('intruder') ||

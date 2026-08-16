@@ -32,6 +32,16 @@ export * from './firmware/LibraryDependencyManager';
 export * from './tools/CircuitValidator';
 export * from './healing/AutoHealingEngine';
 
+// Requirements Extraction & Constraint Validation
+export * from './requirements/RequirementExtractor';
+export * from './requirements/ComponentConstraintValidator';
+
+// Compiler Error Classification, Library Resolution & Deterministic Repair
+export * from './compiler/CompilationErrorClassifier';
+export * from './compiler/LibraryResolver';
+export * from './compiler/RepairPlanner';
+export * from './compiler/AutoRecompileLoop';
+
 // Simulation Testing & Runtime Verification
 export * from './testing/SimulationScenarioGenerator';
 export * from './testing/ScenarioRunner';

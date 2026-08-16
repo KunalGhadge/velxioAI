@@ -121,6 +121,11 @@ export class ComponentAliasRegistry {
     return `wokwi-${term}`;
   }
 
+  public static resolveAlias(term: string): string | null {
+    if (!this.has(term)) return null;
+    return this.resolve(term);
+  }
+
   /**
    * Checks if an alias or canonical component is recognized.
    */
