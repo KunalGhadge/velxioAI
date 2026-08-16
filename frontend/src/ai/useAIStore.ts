@@ -270,8 +270,27 @@ export const useAIStore = create<AIStoreState>()(
           set({ repairAttempts: 0 });
         }
 
-        // 1. Stash Workspace Snapshot for 1-Click Rollback
-        // 1. Deterministic Intent Classification
+        // 1. Direct Deterministic Auto-Fix Dispatch
+        const isFixCommand =
+          promptText.startsWith('/fix') ||
+          /\b(auto-?fix|fix\s+(all|errors?|it|this|the\s+circuit|the\s+code|project)|repair\s+(all|it|this|project))\b/i.test(
+            promptText
+          );
+
+        if (isFixCommand || options?.isAutoRepair) {
+          const userMsg: AIMessage = {
+            id: `user-${Date.now()}`,
+            role: 'user',
+            content: promptText.trim(),
+            intent: 'DEBUG',
+            timestamp: Date.now(),
+          };
+          set((s) => ({ messages: [...s.messages, userMsg] }));
+          await get().repairWithAI();
+          return;
+        }
+
+        // 2. Deterministic Intent Classification
         const intentResult = IntentClassifier.classify(promptText);
         console.log(`[AI MODE] ${intentResult.intent} (Confidence: ${intentResult.confidence}, Reasons: ${intentResult.reasons.join(', ')})`);
 
