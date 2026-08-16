@@ -238,9 +238,15 @@ export const HARDWARE_COMPONENT_PROFILES: Record<string, HardwareComponentProfil
   },
 };
 
+import { ComponentAliasRegistry } from './ComponentAliasRegistry';
+
 export class HardwareComponentRegistry {
   public static getComponent(type: string): HardwareComponentProfile | null {
     if (!type) return null;
+    const resolvedTag = ComponentAliasRegistry.resolve(type);
+    if (HARDWARE_COMPONENT_PROFILES[resolvedTag]) {
+      return HARDWARE_COMPONENT_PROFILES[resolvedTag];
+    }
     const normalized = type.startsWith('wokwi-') || type.startsWith('velxio-') ? type : `wokwi-${type}`;
     if (HARDWARE_COMPONENT_PROFILES[normalized]) {
       return HARDWARE_COMPONENT_PROFILES[normalized];

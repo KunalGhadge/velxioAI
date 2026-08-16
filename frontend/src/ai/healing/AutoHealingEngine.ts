@@ -8,6 +8,7 @@
 
 import { HardwareComponentRegistry } from '../hardware/HardwareComponentRegistry';
 import { BoardCapabilityRegistry } from '../hardware/BoardCapabilityRegistry';
+import { ComponentAliasRegistry } from '../hardware/ComponentAliasRegistry';
 import type { CircuitProposal, CodeProposal } from '../types';
 
 export interface HealingFix {
@@ -90,15 +91,7 @@ export class AutoHealingEngine {
     if (lowerError.includes('unknown component type')) {
       const match = errorText.match(/unknown component type "([^"]+)"/i);
       const invalidType = match ? match[1].toLowerCase() : '';
-
-      let suggestedType = 'wokwi-led';
-      if (invalidType.includes('dht') || invalidType.includes('temp')) suggestedType = 'wokwi-dht22';
-      else if (invalidType.includes('sonar') || invalidType.includes('ultra') || invalidType.includes('distance')) suggestedType = 'wokwi-hc-sr04';
-      else if (invalidType.includes('oled') || invalidType.includes('display')) suggestedType = 'wokwi-ssd1306';
-      else if (invalidType.includes('lcd') || invalidType.includes('screen')) suggestedType = 'wokwi-lcd1602';
-      else if (invalidType.includes('motor') || invalidType.includes('servo')) suggestedType = 'wokwi-servo';
-      else if (invalidType.includes('pir') || invalidType.includes('motion')) suggestedType = 'wokwi-pir-motion-sensor';
-      else if (invalidType.includes('light') || invalidType.includes('ldr')) suggestedType = 'wokwi-photoresistor-sensor';
+      const suggestedType = ComponentAliasRegistry.resolve(invalidType);
 
       diagnostics.push(`Unsupported component alias "${invalidType}". Suggested canonical type: "${suggestedType}"`);
       fixes.push({
