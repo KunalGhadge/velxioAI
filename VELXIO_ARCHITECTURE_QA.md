@@ -464,3 +464,207 @@ During simulation, wire graphs are compiled into continuous electrical nodes usi
 2. All connected endpoints with pins named `5V`, `3V3`, `VCC`, or `VDD` are unioned into canonical SPICE Node **`vcc_rail`**.
 3. All other interconnected pins form isolated nodal voltage nets (`n1`, `n2`, `n3`, ...), which are fed to the **WASM ngspice solver** to evaluate voltages and currents in real time.
 
+---
+
+## Question 3: AI Architecture
+
+**Describe the current AI implementation.**
+
+**Explain:**
+- Which model is being used
+- How prompts are constructed
+- How conversation history is stored
+- Whether the AI can call tools
+- Whether the AI directly generates code
+- Whether the AI edits files
+- Whether the AI can access the entire codebase
+
+*Draw the AI workflow.*
+
+---
+
+## Answer 3
+
+### 1. Architectural Overview of VelxioAI Studio
+
+VelxioAI integrates a **ReAct-driven Autonomous Studio Agent** designed specifically for embedded hardware engineering. Unlike a standard chatbot that only outputs conversational text, Velxio's AI agent operates as a **paired co-pilot** that continuously senses the live state of the IDE (circuit canvas, Monaco code editor, compiler diagnostic logs, and serial monitor) and executes deterministic changes across files, hardware components, wiring, and simulation controls.
+
+---
+
+### 2. Deep-Dive Specification
+
+#### A. Which Models Are Being Used
+Velxio uses a **Provider-Agnostic LLM Gateway** ([`LLMClient.ts`](file:///d:/NEW/VelxioAI/frontend/src/ai/LLMClient.ts)) supporting multi-vendor streaming APIs:
+
+| Provider | Models Supported | Default / Recommended |
+| :--- | :--- | :--- |
+| **Google Gemini** | `gemini-2.5-flash`, `gemini-2.5-pro`, `gemini-1.5-flash` | **`gemini-2.5-flash` (Default)** |
+| **Anthropic Claude** | `claude-3-7-sonnet-20250219`, `claude-3-5-sonnet-20241022`, `claude-3-5-haiku` | `claude-3-7-sonnet-20250219` |
+| **OpenAI** | `gpt-4o`, `gpt-4o-mini`, `o3-mini` | `gpt-4o` |
+| **DeepSeek** | `deepseek-chat`, `deepseek-reasoner` | `deepseek-chat` |
+| **Local / Self-Hosted** | Local Ollama (`http://localhost:11434/v1`) or any custom OpenAI-compatible API | `ollama/qwen2.5-coder` |
+
+Users can configure their API keys and switch models dynamically in the **AI Settings Modal** (`AISettingsModal.tsx`), stored securely in their browser's local storage.
+
+---
+
+#### B. How Prompts Are Constructed
+Prompts are dynamically built on every user turn by [`AIContextCollector.ts`](file:///d:/NEW/VelxioAI/frontend/src/ai/AIContextCollector.ts) using a two-tier structure:
+
+1. **Static Engineering Directives & Rules**:
+   - **Intent Separation**: Strict rules differentiating greetings (plain text), theoretical explanations (clean markdown), and hardware/code tasks (action blocks).
+   - **Hardware Pinout Constraints**: Real physical pin capabilities for the active board (e.g. Arduino Uno has Digital 0–13 and Analog A0–A5; ESP32 has GPIO 0–39).
+   - **Component Registry Catalog**: Exact Wokwi custom element names (`wokwi-led`, `wokwi-dht22`, `wokwi-lcd1602`, `wokwi-pir-motion-sensor`, etc.).
+   - **Circuit Rules**: Mandatory 220Ω series current-limiting resistors on LEDs, standard electrical wire color-coding.
+   - **Action Block Schema**: Strict JSON structure specification (`velxio-action`).
+
+2. **Dynamic Live Workspace Snapshot**:
+   - **Active Microcontroller**: Kind, label, and FQBN (e.g. `arduino:avr:uno`).
+   - **Canvas Components**: JSON array of all placed peripheral parts and coordinates.
+   - **Wiring Netlist**: JSON list of all active wire connections (`fromPart:fromPin` $\rightarrow$ `toPart:toPin`).
+   - **Virtual File Tree**: List of all files in the project workspace (`sketch.ino`, `libraries.txt`, etc.).
+   - **Active File Preview**: Real-time content of the currently open editor tab.
+   - **Compiler Diagnostics**: Recent stdout/stderr error logs from `arduino-cli` / `espidf`.
+   - **SPICE Net Warnings**: Floating pins, short circuits, or burnout warnings.
+   - **Serial Monitor Buffer**: The last 500 characters of live UART output.
+
+---
+
+#### C. How Conversation History Is Stored
+- **State Store**: Managed by Zustand in [`useAIStore.ts`](file:///d:/NEW/VelxioAI/frontend/src/ai/useAIStore.ts) under `messages: AIMessage[]`.
+- **Browser Persistence**: Serialized to browser `localStorage` under the key `velxio_ai_store` using Zustand's `persist` middleware.
+- **Rolling Window**: Sliced to the **last 50 messages** to ensure optimal memory usage and token economy.
+- **Message Schema**:
+  ```typescript
+  export interface AIMessage {
+    id: string;
+    role: 'user' | 'assistant' | 'system';
+    content: string;                    // Rendered clean markdown
+    reasoning?: string;                 // Extracted model reasoning trace
+    steps?: ActionStep[];               // Structured progress checklist
+    circuitProposal?: CircuitProposal;  // Hardware components & wires
+    codeProposal?: CodeProposal;        // Firmware code diff & metadata
+    learningCard?: HardwareLearningCardData; // Explanatory theory card
+    bomData?: HardwareBOMData;          // Bill of Materials & pricing
+    error?: string;
+    timestamp: number;
+  }
+  ```
+
+---
+
+#### D. Whether the AI Can Call Tools
+**YES.** The AI possesses full programmatic tool invocation through the **[`AgentToolEngine.ts`](file:///d:/NEW/VelxioAI/frontend/src/ai/AgentToolEngine.ts)** API suite:
+
+| Tool Method | Category | Functionality |
+| :--- | :--- | :--- |
+| `AgentToolEngine.writeFile(name, code)` | File System | Creates or updates project files in Monaco |
+| `AgentToolEngine.readFile(name)` | File System | Reads any file in the workspace |
+| `AgentToolEngine.deleteFile(name)` | File System | Deletes files from the workspace |
+| `AgentToolEngine.installLibraries(libs[])` | File System | Adds dependencies to `libraries.txt` and board manifest |
+| `AgentToolEngine.setBoard(boardKind)` | Hardware | Switches active board (Uno, Nano, ESP32, Pico, Pi 3) |
+| `AgentToolEngine.applyCircuit(proposal)` | Circuit | Auto-places components & routes standard colored wires |
+| `AgentToolEngine.clearCircuit()` | Circuit | Wipes peripheral canvas components |
+| `AgentToolEngine.beautifyCircuit()` | Circuit | Calculates non-overlapping grid layout |
+| `AgentToolEngine.compileProject()` | Simulation | Triggers backend `arduino-cli` compilation |
+| `AgentToolEngine.startSimulation()` | Simulation | Launches CPU emulator & SPICE analog solver |
+| `AgentToolEngine.stopSimulation()` | Simulation | Halts running simulation |
+| `AgentToolEngine.resetBoard()` | Simulation | Resets MCU program counter & peripheral states |
+| `AgentToolEngine.readSerial()` | Diagnostics | Reads live serial monitor text |
+| `AgentToolEngine.writeSerial(data)` | Diagnostics | Sends input into MCU UART RX stream |
+
+---
+
+#### E. Whether the AI Directly Generates Code
+**YES.** The AI generates complete, production-ready embedded C/C++ (`.ino`, `.cpp`, `.h`), MicroPython (`.py`), or Rust firmware directly within its structured proposal blocks. It adheres to real MCU constraints (memory, pin definitions, hardware interrupts, timers, and peripheral libraries).
+
+---
+
+#### F. Whether the AI Edits Files
+**YES.** When an action or code proposal is received:
+1. `AgentToolEngine.writeFile(proposal.fileName, proposal.proposedContent)` updates the file inside `useEditorStore`.
+2. The file is automatically focused and synced with the active **Monaco Editor instance**.
+3. Any newly required external libraries (e.g. `LiquidCrystal`, `DHT sensor library`, `Adafruit SSD1306`) are automatically detected and appended to `libraries.txt`.
+
+---
+
+#### G. Whether the AI Can Access the Entire Codebase
+- **Project Workspace (YES)**: The AI has complete read/write access to all files, netlists, manifests, and logs inside the user's active embedded project sandbox.
+- **Host Application / Backend Codebase (Sandboxed)**: The AI runs in the browser client context and interacts strictly through the defined `AgentToolEngine` APIs and REST/WebSocket endpoints. It cannot crawl or modify external host server system files outside the project sandbox.
+
+---
+
+### 3. Complete AI Execution Workflow
+
+```
+                                  VELXIO AI WORKFLOW
+                                          │
+                        ┌─────────────────▼─────────────────┐
+                        │     User Input (Chat / Prompt)    │
+                        └─────────────────┬─────────────────┘
+                                          │
+                        ┌─────────────────▼─────────────────┐
+                        │   1. Snapshot State Collector     │
+                        │      (AIContextCollector.ts)      │
+                        │  - Active Board & MCU Pinouts     │
+                        │  - Placed Components & Netlist    │
+                        │  - Open Files & Code Previews     │
+                        │  - Compiler Logs & Serial Output  │
+                        └─────────────────┬─────────────────┘
+                                          │
+                        ┌─────────────────▼─────────────────┐
+                        │    2. Workspace Checkpoint Stash  │
+                        │   (1-Click Snapshot Rollback)     │
+                        └─────────────────┬─────────────────┘
+                                          │
+                        ┌─────────────────▼─────────────────┐
+                        │    3. Streaming LLM Execution     │
+                        │         (LLMClient.ts)            │
+                        │  - Gemini / Claude / GPT-4o /     │
+                        │    DeepSeek / Local Ollama        │
+                        └─────────────────┬─────────────────┘
+                                          │
+                        ┌─────────────────▼─────────────────┐
+                        │    4. Resilient Action Parser     │
+                        │       (extractVelxioAction)       │
+                        │  - Sanitizes Python """ quotes    │
+                        │  - Strips JSON from chat display  │
+                        └─────────────────┬─────────────────┘
+                                          │
+                 ┌────────────────────────┴────────────────────────┐
+                 │                                                 │
+        [Is Action Block?]                                 [Is Plain Chat?]
+                 │                                                 │
+┌────────────────▼────────────────┐               ┌────────────────▼────────────────┐
+│   5. Agent Tool Dispatcher      │               │   Render Clean Markdown in      │
+│      (AgentToolEngine.ts)       │               │   AIAssistantDock Chat Stream   │
+│                                 │               └─────────────────────────────────┘
+│ ┌─────────────────────────────┐ │
+│ │ Set Target MCU Board        │ │
+│ └──────────────┬──────────────┘ │
+│                │                │
+│ ┌──────────────▼──────────────┐ │
+│ │ Collision-Free Grid Layout  │ │
+│ │  (CircuitLayoutEngine.ts)   │ │
+│ └──────────────┬──────────────┘ │
+│                │                │
+│ ┌──────────────▼──────────────┐ │
+│ │ Write Code & Install Libs   │ │
+│ │    (useEditorStore.ts)      │ │
+│ └──────────────┬──────────────┘ │
+│                │                │
+│ ┌──────────────▼──────────────┐ │
+│ │ Auto-Route Standard Wires   │ │
+│ │   (useSimulatorStore.ts)    │ │
+│ └─────────────────────────────┘ │
+└────────────────┬────────────────┘
+                 │
+┌────────────────▼────────────────┐
+│  6. Live Workspace Update       │
+│  - Canvas re-renders parts      │
+│  - Monaco displays new code     │
+│  - Compiler ready for run/solve │
+└─────────────────────────────────┘
+```
+
+
