@@ -42,11 +42,14 @@ interface AIStoreState {
   selectedTemplateId: string | null;
   checkpointSnapshot: WorkspaceSnapshot | null;
   repairAttempts: number;
+  settingsModalOpen: boolean;
 
   // Actions
   setDockOpen: (open: boolean) => void;
   toggleDock: (open?: boolean) => void;
   setDockWidth: (width: number) => void;
+  openSettingsModal: () => void;
+  closeSettingsModal: () => void;
   updateSettings: (partial: Partial<AISettings>) => void;
   setApiKey: (provider: any, key: string) => void;
   sendMessage: (promptText: string, options?: { isAutoRepair?: boolean }) => Promise<void>;
@@ -204,10 +207,13 @@ export const useAIStore = create<AIStoreState>()(
       selectedTemplateId: null,
       checkpointSnapshot: null,
       repairAttempts: 0,
+      settingsModalOpen: false,
 
       setDockOpen: (open) => set({ dockOpen: open }),
       toggleDock: (open?: boolean) => set((s) => ({ dockOpen: open !== undefined ? open : !s.dockOpen })),
       setDockWidth: (width) => set({ dockWidth: Math.max(320, Math.min(800, width)) }),
+      openSettingsModal: () => set({ settingsModalOpen: true }),
+      closeSettingsModal: () => set({ settingsModalOpen: false }),
 
       updateSettings: (partial) => {
         set((state) => ({
