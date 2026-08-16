@@ -10,7 +10,7 @@
  * Strictly eliminates sending compiler logs to LLMs or asking users for fixes.
  */
 
-import { CompilerDiagnosticEngine, CompilerDiagnostic } from './CompilerDiagnosticEngine';
+import { CompilerDiagnosticEngine, type CompilerDiagnostic } from './CompilerDiagnosticEngine';
 import { AgentToolEngine } from '../AgentToolEngine';
 import { FirmwareTemplateEngine } from '../firmware/FirmwareTemplateEngine';
 import { PinAssignmentRegistry } from '../hardware/PinAssignmentRegistry';
